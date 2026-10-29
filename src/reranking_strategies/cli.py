@@ -2,6 +2,7 @@ import argparse
 import json
 from pathlib import Path
 
+from .answer_judging import OpenAIAnswerJudge, evaluate_answers
 from .data import load_documents, load_queries, validate_dataset
 from .evaluation import evaluate, recommend_best_strategy
 from .pricing import (
@@ -26,10 +27,12 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Evaluate retrieval and reranking strategies")
-    parser.add_argument("command", choices=["evaluate", "benchmark"])
+    parser.add_argument("command", choices=["evaluate", "benchmark", "judge-answers"])
     parser.add_argument("--documents", default=str(ROOT / "data/documents.json"))
     parser.add_argument("--queries", default=str(ROOT / "data/golden.json"))
     parser.add_argument("--output", default="")
+    parser.add_argument("--answers", default="", help="JSON answer samples for judge-answers")
+    parser.add_argument("--judge-model", default="gpt-6-luna", help="Model used by judge-answers")
     parser.add_argument("--candidate-k", type=int, default=10)
     parser.add_argument("--metric-k", type=int, default=5)
     parser.add_argument("--dense", action="store_true", help="Index and compare dense/hybrid Qdrant retrieval")
@@ -55,6 +58,46 @@ def main() -> None:
     documents = load_documents(args.documents)
     queries = load_queries(args.queries)
     validate_dataset(documents, queries)
+    if args.command == "judge-answers":
+        if not args.answers:
+            parser.error("judge-answers requires --answers")
+        try:
+            answer_samples = json.loads(Path(args.answers).read_text())
+        except json.JSONDecodeError as exc:
+            parser.error(f"{args.answers} contains invalid JSON: {exc.msg}")
+        if not isinstance(answer_samples, list) or not answer_samples:
+            parser.error("--answers must contain a non-empty JSON array")
+        if len(answer_samples) > args.max_llm_calls:
+            parser.error(
+                f"{len(answer_samples)} answer judgments exceed --max-llm-calls "
+                f"({args.max_llm_calls}); increase the cap or reduce samples"
+            )
+        try:
+            from openai import OpenAI
+        except ImportError as exc:
+            raise RuntimeError("Install with: pip install -e '.[llm-judge]'") from exc
+        judge = OpenAIAnswerJudge(
+            args.judge_model, OpenAI(), CallBudget(args.max_llm_calls)
+        )
+        report = {
+            "experiment": {
+                "judge_model": args.judge_model,
+                "max_llm_calls": args.max_llm_calls,
+                "pricing_as_of": PRICING_AS_OF,
+                "pricing_source": PRICING_SOURCE,
+                "pricing_rates_usd_per_million_tokens": OPENAI_STANDARD_RATES_PER_MILLION,
+            },
+            **evaluate_answers(answer_samples, queries, documents, judge),
+        }
+        serialized = json.dumps(report, indent=2)
+        if args.output:
+            output = Path(args.output)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(serialized + "\n")
+            print(json.dumps({"report": str(output), "summary": report["summary"]}, indent=2))
+        else:
+            print(serialized)
+        return
     if args.pairwise_candidates <= 0:
         parser.error("--pairwise-candidates must be positive")
     bm25 = BM25Retriever(documents)

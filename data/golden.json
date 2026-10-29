@@ -1,8 +1,8 @@
 [
-  {"id":"q-001","query":"Which service owns invoice payment retries?","relevance":{"doc-001":3,"doc-002":3,"doc-009":2},"tags":["paraphrase","multi_relevant"]},
-  {"id":"q-002","query":"What happened in INC-4821?","relevance":{"doc-006":3},"tags":["exact_identifier"]},
-  {"id":"q-003","query":"How long are security audit events retained?","relevance":{"doc-008":3},"tags":["exact_fact"]},
-  {"id":"q-004","query":"How do I find a stuck payment retry?","relevance":{"doc-009":3,"doc-001":2,"doc-002":2},"tags":["paraphrase","procedural"]},
-  {"id":"q-005","query":"Who owns catalog product descriptions?","relevance":{"doc-010":3},"tags":["exact_fact"]},
-  {"id":"q-006","query":"What is the retention period for chat recordings?","relevance":{},"tags":["unanswerable"],"answerable":false}
+  {"id":"q-001","query":"Which service owns invoice payment retries?","relevance":{"doc-001":3,"doc-002":3,"doc-009":2},"tags":["paraphrase","multi_relevant"],"reference_answer":"The retry worker owns payment retry scheduling. The billing worker retries failed invoice payments up to three times with exponential backoff."},
+  {"id":"q-002","query":"What happened in INC-4821?","relevance":{"doc-006":3},"tags":["exact_identifier"],"reference_answer":"INC-4821 was caused by a stuck billing worker. The remediation increased the retry limit from two attempts to three."},
+  {"id":"q-003","query":"How long are security audit events retained?","relevance":{"doc-008":3},"tags":["exact_fact"],"reference_answer":"Security audit events are retained for one year."},
+  {"id":"q-004","query":"How do I find a stuck payment retry?","relevance":{"doc-009":3,"doc-001":2,"doc-002":2},"tags":["paraphrase","procedural"],"reference_answer":"Check the billing_jobs table and billing queue, then restart the billing worker if needed. The retry policy allows three attempts."},
+  {"id":"q-005","query":"Who owns catalog product descriptions?","relevance":{"doc-010":3},"tags":["exact_fact"],"reference_answer":"The catalog team owns product descriptions, SKU metadata, and storefront publication status."},
+  {"id":"q-006","query":"What is the retention period for chat recordings?","relevance":{},"tags":["unanswerable"],"answerable":false,"reference_answer":null}
 ]
