@@ -1,42 +1,30 @@
 # Reranking Strategies
 
-A reproducible lab for comparing retrieval and reranking strategies on a small synthetic RAG corpus. It makes the ranking step visible: retrieve a broad candidate set, reorder it using query and passage relevance, then evaluate what should reach the context window.
+An engineering lab for answering a practical RAG question: **which retrieval and reranking pipeline gives the best evidence for the least latency and cost?**
 
-## Why rerank?
+The project runs keyword, vector, and hybrid retrieval against the same small corpus, applies several reranking methods to the retrieved candidates, and reports ranking quality alongside latency and LLM usage. It is intended for learning and controlled experiments. It is not a hosted RAG service, a production capacity benchmark, or a fine-tuning framework.
 
-Retrieval systems quickly find passages that may answer a query. Their top results can still contain related but non-answering material. A reranker examines the query and each candidate together and reorders that set for the specific query.
+## Start here
 
-```text
-Query
-  → Retrieve a broad candidate set
-  → Optionally fuse dense and keyword results
-  → Rerank candidates against the query
-  → Keep the final top K passages for context
-```
+### What you can learn from this project
 
-Reranking cannot recover a relevant passage that retrieval left out. Candidate recall therefore sets an upper bound on the quality a reranker can achieve. Reranking also adds latency and, for hosted judges, may add API cost.
+- Whether reranking improves the order of passages that retrieval already found.
+- How BM25, dense vector search, and hybrid retrieval compare on one labeled query set.
+- How heuristic, diversity-aware, cross-encoder, and LLM-based rerankers trade quality for latency and cost.
+- What an LLM-as-a-judge workflow can measure for both rankings and generated answers.
+- How to retrieve domain graph edges as evidence-bearing records and evaluate their ranking.
 
-| Strategy | What it does | Trade-off |
-| --- | --- | --- |
-| Retrieval only | Uses the initial BM25 or dense ranking | Simple and fast; may favor related text over direct evidence |
-| Retrieval plus reranking | Reorders one candidate list for the query | Can improve evidence order; adds compute and latency |
-| Hybrid retrieval plus reranking | Fuses keyword and dense candidates, then reranks | Combines exact matches and semantic similarity; adds more components to tune |
+Reranking cannot recover evidence that the retriever missed. This is why the evaluation reports retrieval quality separately from reranking quality.
 
-Apply access and metadata filters during retrieval, before reranking. The full design guidance is in [Retrieval strategy: reranking](https://github.com/CaioHAndradeLima/AI-System-Architecturing-Engineering/blob/main/retrieval/search/retrieval-strategy-reranking.md).
+### Current results at a glance
 
-## What this project compares
+The checked-in golden set has six synthetic queries. In one local run with 10 retrieved candidates and a top-five evaluation cutoff, heuristic reranking had the best measured nDCG in each retrieval mode. Its nDCG@5 was 0.744 with BM25, dense retrieval, and hybrid retrieval. On the separate 19-edge dataset, hybrid retrieval without reranking had the highest measured nDCG@5 (0.816). These results are small-corpus smoke benchmarks, not evidence that the same methods will win on another dataset.
 
-- **BM25** keyword retrieval as the offline baseline.
-- **Dense retrieval** using Qdrant and FastEmbed, plus **hybrid retrieval** using reciprocal rank fusion (RRF).
-- **Heuristic** lexical/title scoring and **MMR** relevance/diversity reranking.
-- Optional **cross-encoder** reranking and **OpenAI listwise** reranking. A generic pairwise judge adapter is available for an injected comparator.
-- Per-query and aggregate **Recall@K**, **MRR@K**, **nDCG@K**, mean/p50/p95 stage latency, LLM request/retry counts, token usage, and estimated API cost.
+Live LLM ranking and answer-judge results have **not** been collected in this checkout. The offline tests use fake LLM clients; they verify behavior and accounting without making paid API calls.
 
-The golden set uses graded relevance: 0 is irrelevant, 1 is partial, 2 is useful, and 3 directly answers the query. The evaluation runs each reranker on the same retrieved candidates, so it can distinguish retrieval misses from ordering improvements.
+### Quick start
 
-For guidance on golden sets, candidate recall, ranking metrics, hard negatives, latency, and fine-tuning decisions, see [Reranker evaluation and fine-tuning](https://github.com/CaioHAndradeLima/AI-System-Architecturing-Engineering/blob/main/retrieval/search/retrieval-reranker-evaluation-and-fine-tuning.md).
-
-## Quick start
+Requires Python 3.10 or newer.
 
 ```bash
 python3 -m venv .venv
@@ -45,168 +33,110 @@ pip install -e .
 python -m reranking_strategies.cli evaluate
 ```
 
-The default run evaluates BM25, heuristic reranking, and MMR using the included data. The defaults retrieve 10 candidates and score the top 5. Save a detailed JSON report with:
+The default evaluation compares BM25 retrieval with retrieval-only ranking, heuristic reranking, and MMR. It uses the included corpus and labels, retrieves 10 candidates, and evaluates the top five. To save a detailed JSON report:
 
 ```bash
-python -m reranking_strategies.cli evaluate --candidate-k 20 --metric-k 5 --output reports/bm25.json
+python -m reranking_strategies.cli evaluate \
+  --candidate-k 20 --metric-k 5 \
+  --output reports/bm25.json
 ```
 
-Both cutoffs must be positive integers. The input loaders check JSON structure, unique IDs, relevance grades, answerability, and references from query labels to documents before evaluation.
+## How the evaluation works
 
-## Run dense and hybrid retrieval
+Each query has a set of relevant documents with graded labels: `0` irrelevant, `1` partially relevant, `2` useful, and `3` directly answers the query. For each retrieval mode, the evaluator gathers the candidate set once, then applies each reranker to those same candidates. This makes it possible to see whether a miss happened during retrieval or whether a relevant candidate was simply ranked too low.
 
-Start Qdrant, install its optional client and embedding dependencies, and run the dense and hybrid comparisons:
+The report includes per-query results as well as aggregate metrics:
+
+| Metric | What it tells you |
+| --- | --- |
+| Recall@K | How much of the labeled relevant evidence appears in the top K. Low recall usually points to retrieval or candidate-depth problems. |
+| MRR@K | How early the first relevant result appears. Higher values mean users or generators encounter useful evidence sooner. |
+| nDCG@K | Whether the top K results are ordered well, accounting for the graded relevance labels. This is the default selection metric. |
+| Mean, p50, p95 stage latency | How long retrieval or reranking took in the measured run. Timing depends on the machine, corpus, warm-up, and provider. |
+| LLM requests, retries, tokens, estimated cost | The usage reported by live model calls. Offline strategies have zero LLM usage. |
+
+Do not compare ranking scores without also checking candidate recall: a reranker can only reorder candidates it receives. Use a manually reviewed golden set, hold out queries during tuning, and repeat latency measurements on representative data. See the companion guides on [reranking strategy](https://github.com/CaioHAndradeLima/AI-System-Architecturing-Engineering/blob/main/retrieval/search/retrieval-strategy-reranking.md) and [reranker evaluation and fine-tuning](https://github.com/CaioHAndradeLima/AI-System-Architecturing-Engineering/blob/main/retrieval/search/retrieval-reranker-evaluation-and-fine-tuning.md).
+
+## Retrieval options
+
+### BM25 baseline
+
+BM25 ranks passages by lexical match. It is a useful no-service baseline and often handles exact terms, names, and identifiers well.
 
 ```bash
-docker compose up -d qdrant
-pip install -e '.[qdrant]'
-python -m reranking_strategies.cli evaluate --dense --output reports/qdrant.json
+python -m reranking_strategies.cli evaluate \
+  --output reports/bm25.json
 ```
 
-FastEmbed downloads the embedding model on first use. Each run replaces the configured Qdrant collection with a snapshot of the current corpus, so deleted documents do not remain searchable. Stop the service with `docker compose down`.
+### Dense and hybrid retrieval
 
-Run the Docker-backed reindex regression test with:
-
-```bash
-RERANKING_QDRANT_URL=http://localhost:6333 python -m unittest discover -s tests -p 'test_qdrant_store.py' -v
-```
-
-### Retrieve and rerank graph edges
-
-Qdrant's HNSW graph is an internal nearest-neighbor index; its links are not application relationships. This experiment stores each domain relationship as its own vector point and keeps the directed endpoints, relation label, and supporting document IDs in the point payload. Qdrant points support a vector plus optional payload ([Qdrant points](https://qdrant.tech/documentation/concepts/points/)); indexed payload fields can filter vector search ([Qdrant filtering](https://qdrant.tech/documentation/search/filtering/)).
-
-The example edges in [`edges.json`](data/edges.json) are extracted from the sample passages. [`edge_golden.json`](data/edge_golden.json) labels relevant edges for six queries. `benchmark-edges` uses the existing BM25, dense Qdrant, and hybrid RRF retrievers, then evaluates the normal heuristic and MMR rerankers plus `EdgeStructureReranker`. That edge-aware reranker combines 75% of the candidate's normalized retrieval score with 25% lexical overlap across the query and the edge's source, relation, target, and description. This preserves most of the retriever's signal while testing whether edge fields can refine it.
-
-Run the BM25 experiment without Docker:
-
-```bash
-python -m reranking_strategies.cli benchmark-edges \
-  --output reports/edges-bm25.json
-```
-
-Run the dense and hybrid edge experiment with Qdrant:
+Dense retrieval embeds queries and passages, then searches Qdrant. Hybrid retrieval combines dense and BM25 rankings with reciprocal rank fusion (RRF), which can balance semantic matches with exact terms.
 
 ```bash
 docker compose up -d qdrant
 pip install -e '.[qdrant]'
-python -m reranking_strategies.cli benchmark-edges --dense \
-  --output reports/edges-qdrant.json
+python -m reranking_strategies.cli evaluate --dense \
+  --output reports/qdrant.json
 ```
 
-Each edge retains its `evidence_ids`, so after retrieving an edge you can fetch the supporting passages. The Qdrant adapter can also filter an edge search by indexed payload fields such as its source, relation, or target:
+FastEmbed downloads its embedding model on first use. The evaluation adapter replaces the configured demo collection with the current corpus snapshot, including removing stale points. Stop Qdrant with `docker compose down`.
 
-```python
-from reranking_strategies.data import load_documents, load_edges
-from reranking_strategies.qdrant_store import QdrantDenseStore
+## Reranking methods
 
-source_documents = load_documents("data/documents.json")
-edges = [edge.as_document() for edge in load_edges("data/edges.json", source_documents)]
-edge_documents_by_id = {edge.id: edge for edge in edges}
-store = QdrantDenseStore(collection="reranking_edge_demo")
-store.index(edges, indexed_payload_fields=("kind", "source_id", "relation", "target_id"))
+The evaluation can compare these approaches on the same retrieved candidate set:
 
-store.search(
-    "Which service schedules invoice retries?",
-    edge_documents_by_id,
-    limit=10,
-    filters={"kind": "edge", "source_id": "service:retry-worker"},
-)
-```
+| Method | How it ranks candidates | When it is useful to test |
+| --- | --- | --- |
+| Retrieval only | Keeps the retriever's order | Baseline for measuring whether reranking adds value |
+| Heuristic | Scores lexical overlap and title matches | Fast, transparent baseline with no external model |
+| MMR | Balances relevance with diversity among selected passages | Tests whether redundant evidence is crowding out useful coverage |
+| Cross-encoder | Scores each query-passage pair with a local model | Higher-quality local ranking when model compute and latency are acceptable |
+| Listwise LLM judge | Gives a candidate set to a model and asks it to order the candidates | One model call can rank a shortlist; prompt size grows with candidate text |
+| Pairwise LLM judge | Asks a comparator to choose between candidates, then sorts the results | Tests pair judgments; call count can grow quadratically with shortlist size |
+| Bounded fallback | Calls a primary listwise model, then one fallback if reported confidence is below a threshold | Tests whether a second attempt helps enough to justify its latency and cost |
 
-This prototype retrieves individual edges; it does not yet expand graph paths or infer entities from arbitrary questions. For multi-hop questions, the next step is to identify seed entities, expand a bounded number of adjacent edges, then rerank candidate paths for endpoint and relation fit, direction, evidence quality, and path continuity. Keep that path benchmark separate from single-edge retrieval because it measures a different task.
-
-#### Measured edge-point baseline
-
-One Docker-backed run, 19 edge points, six queries, `candidate_k=10`, `metric_k=5`. Quality values are means; p95 latency is for retrieval or reranking stage only. Costs are zero for these non-LLM methods. The small corpus is a smoke benchmark.
-
-| Retrieval mode | Strategy | Recall@5 | MRR@5 | nDCG@5 | Stage p95 (ms) |
-| --- | --- | ---: | ---: | ---: | ---: |
-| BM25 | Retrieval only | 0.736 | 0.750 | 0.764 | 0.096 |
-| BM25 | Heuristic | 0.750 | 0.667 | 0.711 | 0.050 |
-| BM25 | MMR | 0.736 | 0.750 | 0.762 | 0.632 |
-| BM25 | Edge structure | 0.736 | 0.750 | 0.762 | 0.047 |
-| Dense | Retrieval only | 0.750 | 0.833 | 0.797 | 5.417 |
-| Dense | Heuristic | 0.750 | 0.667 | 0.711 | 0.134 |
-| Dense | MMR | 0.750 | 0.833 | 0.784 | 1.328 |
-| Dense | Edge structure | 0.750 | 0.833 | 0.797 | 0.097 |
-| Hybrid RRF | Retrieval only | 0.792 | 0.833 | **0.816** | 4.804 |
-| Hybrid RRF | Heuristic | 0.750 | 0.667 | 0.711 | 0.125 |
-| Hybrid RRF | MMR | 0.750 | 0.833 | 0.758 | 1.285 |
-| Hybrid RRF | Edge structure | 0.792 | 0.750 | 0.770 | 0.100 |
-
-On this tiny set, hybrid retrieval alone ranks the labeled edges best. The structural reranker tied dense retrieval and nearly tied BM25+MMR, but reduced hybrid nDCG; the ordinary heuristic also reduced nDCG. So edges are retrievable and can reuse the ranking evaluator, but these results do not support adding a reranker by default. We need more human-reviewed edge labels and multi-hop queries before drawing a broader conclusion. Live LLM edge reranking is available through `benchmark-edges --live-llm`, but has not been measured here because no API key is configured.
-
-## Optional rerankers
-
-Install a local cross-encoder and include it in the evaluation:
+To add the optional cross-encoder:
 
 ```bash
 pip install -e '.[cross-encoder]'
 python -m reranking_strategies.cli evaluate --cross-encoder
 ```
 
-For OpenAI listwise ranking, install the client, set `OPENAI_API_KEY`, and add `--llm-reranker`. `--llm-model` selects the model; the default is `gpt-6-luna`.
+### Live LLM ranking benchmark
 
-### LLM as a judge: methods and test coverage
-
-The project has three LLM judging patterns for passage ranking, covered by deterministic unit tests:
-
-| Method | Strategy and cost shape | Available as |
-| --- | --- | --- |
-| Listwise judge | One request ranks the candidate set. Low request count; prompt size grows with candidate count. | `--llm-reranker` in `evaluate`, or each model in `benchmark --live-llm`. |
-| Pairwise judge | Compares pairs and sorts a shortlist. With `n` candidates the comparator can make up to `n(n-1)/2` calls, so the benchmark defaults to a top-five shortlist. | `--llm-pairwise`, or add `--with-pairwise` in live benchmark mode. |
-| Bounded retry | Runs a primary listwise judge and calls one fallback model only when the primary's self-reported confidence is below the threshold. It never loops indefinitely. | `--llm-loop`, or add `--with-loop` in live benchmark mode. |
-
-Pairwise and listwise prompts treat passage contents as untrusted, and requests set `store=False`. The retry confidence is a model-reported estimate, **not a calibrated probability**. Retrying may improve ordering, leave it unchanged, or make it worse; the evaluator measures the final ranking and counts the extra requests. Do not treat confidence as a quality label until it has been calibrated against human judgments.
-
-The tests use fake Responses clients and fixed comparators; they verify schema validation, request accounting, cost calculation, the one-retry condition, and the call cap without making API calls. The benchmark can compare two or more models, all enabled strategies, and a no-retry versus one-retry result on the same query set:
+The `benchmark` command compares baselines, multiple listwise models, and optional pairwise and fallback strategies. Install the client and set an API key only when you want to make live, billable calls:
 
 ```bash
 pip install -e '.[llm-judge]'
 export OPENAI_API_KEY="..."
-# Baselines, both listwise models, pairwise shortlist, and primary→fallback retry.
-# --max-llm-calls is a hard cap; the preflight rejects a larger worst case.
 python -m reranking_strategies.cli benchmark --live-llm \
   --benchmark-models gpt-6-luna,gpt-6.1-terra \
   --with-pairwise --with-loop --max-llm-calls 200 \
   --output reports/live-llm.json
-
-# Add dense and hybrid retrieval too (three retrieval modes, larger call budget).
-python -m reranking_strategies.cli benchmark --live-llm --dense \
-  --benchmark-models gpt-6-luna,gpt-6.1-terra \
-  --with-pairwise --with-loop --max-llm-calls 500 \
-  --output reports/live-llm-qdrant.json
 ```
 
-`benchmark` always includes BM25, heuristic, and MMR. With `--live-llm`, it also includes one listwise run per model; the flags add pairwise and retry strategies. Its report includes a per-query trace and per-strategy quality, mean/p50/p95 reranker latency, request and retry counts, token counts, and estimated USD cost. It recommends the highest mean value of `--selection-metric` (nDCG by default), breaking ties by p95 latency and then estimated cost. Choose the candidate shortlist, model set, and retrieval mode before looking at held-out results; selecting and reporting on the same tiny golden set can overfit.
+Add `--dense` to compare BM25, dense, and hybrid retrieval in the same benchmark; use a larger `--max-llm-calls` because the enabled strategies are evaluated for each retrieval mode. The call cap is checked before requests are sent. The report includes per-query traces, ranking metrics, mean/p50/p95 reranker latency, calls, retries, token usage, and estimated USD cost. The recommended strategy maximizes the selected metric (nDCG by default), then breaks ties by p95 latency and cost.
 
-Cost estimates use the standard token rates recorded in [`pricing.py`](src/reranking_strategies/pricing.py), checked on 2026-10-29 against the [OpenAI API pricing page](https://developers.openai.com/api/docs/pricing). They account for cached input tokens when usage reports them. Billing can differ by service tier, model, account, and later price changes; unknown model rates are reported as unknown rather than zero.
+The pairwise option defaults to a top-five shortlist; comparing every pair among five items can take up to 10 comparator calls for a query. The fallback option retries at most once. Its trigger uses the model's self-reported confidence, which is **not a calibrated probability**. A retry can improve or worsen the ranking; compare its final metrics with the no-retry result.
 
-### Measured offline baseline
+LLM prompts treat passage text as untrusted input, and API requests set `store=False`. Cost calculations use the standard model rates in [`pricing.py`](src/reranking_strategies/pricing.py) and account for cached input when usage reports it. Model, service-tier, and regional rates can change; unknown rates are reported as unknown rather than zero.
 
-The following is one local Docker-backed run on the included **six-query synthetic golden set**, `candidate_k=10`, `metric_k=5`. Ranking metrics are means across the six queries; latency is p95 for the named retrieval or reranking stage. LLM requests, tokens, and cost are zero for these non-LLM strategies. These small-corpus results are a pipeline smoke benchmark, not evidence that one method will win on another corpus.
+## LLM judge for generated answers
 
-| Retrieval mode | Strategy | Recall@5 | MRR@5 | nDCG@5 | Stage p95 (ms) | LLM requests / retries | Estimated cost |
-| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| BM25 | Retrieval only | 0.778 | 0.667 | 0.710 | 0.018 | 0 / 0 | $0 |
-| BM25 | Heuristic | 0.833 | 0.750 | **0.744** | 0.036 | 0 / 0 | $0 |
-| BM25 | MMR | 0.778 | 0.667 | 0.702 | 0.509 | 0 / 0 | $0 |
-| Dense | Retrieval only | 0.833 | 0.750 | 0.742 | 6.383 | 0 / 0 | $0 |
-| Dense | Heuristic | 0.833 | 0.750 | **0.744** | 0.110 | 0 / 0 | $0 |
-| Dense | MMR | 0.833 | 0.750 | 0.738 | 1.396 | 0 / 0 | $0 |
-| Hybrid RRF | Retrieval only | 0.833 | 0.667 | 0.734 | 5.615 | 0 / 0 | $0 |
-| Hybrid RRF | Heuristic | 0.833 | 0.750 | **0.744** | 0.107 | 0 / 0 | $0 |
-| Hybrid RRF | MMR | 0.722 | 0.639 | 0.675 | 1.395 | 0 / 0 | $0 |
+Ranking metrics measure where relevant evidence appears. They do not tell you whether a generated answer is correct or whether it claims more than the evidence supports. The separate `judge-answers` command scores answers that you supply; it does **not** generate answers. To compare retrieval strategies fairly, generate answers with the same answer model, prompt, and context budget, then provide each answer and the evidence IDs it used.
 
-In this run, heuristic reranking had the top nDCG in all three retrieval modes. The initial candidate set capped recall, and MMR's diversity penalty hurt the hybrid result. Small timing values are machine/run dependent; repeat measurements on representative data before choosing a production strategy.
+The answer judge reports:
 
-**Live LLM results (no retry vs one-retry pipeline): not measured in this checkout.** No `OPENAI_API_KEY` is configured, so there are no honest model quality, latency, token, or cost numbers to publish yet. Run the live benchmark above to populate those rows from provider usage; the report compares each model's listwise result and the retry pipeline on the same queries. In the retry result, request and cost totals include the primary and any fallback calls actually made.
+| Score | Meaning |
+| --- | --- |
+| Correctness | Agreement with the reference answer |
+| Groundedness | Whether the supplied evidence supports the answer's material claims |
+| Assertiveness calibration | Whether the answer's certainty matches the available evidence |
+| Abstention correctness | Whether it answers answerable questions and abstains on unanswerable ones |
 
-### Judge generated answers for correctness and assertiveness
+The first three scores use a 0–4 scale; abstention correctness is reported as a rate from 0 to 1. The report also includes unsupported claims, rationale, latency, requests, tokens, and estimated cost. These are model judgments, not ground truth. Review references and sample outputs with people, compare judge scores to human labels, and inspect disagreements before using the scores to choose a system.
 
-Ranking metrics tell us whether useful passages appear near the top. They do not tell us whether a RAG system's **answer** is correct or overstates what those passages support. The separate `judge-answers` command evaluates supplied answer/evidence samples. It does not generate answers; run the same answer-generation model, prompt, and context budget for each retrieval strategy, then provide each output and its evidence IDs.
-
-The golden query file now supports an optional `reference_answer`. The included answerable queries have initial references derived from the corpus; the unanswerable query has `reference_answer: null`. Have a human review references before treating scores as evaluation labels, and retain a held-out query set. A sample answer file looks like:
+Example answer input:
 
 ```json
 [
@@ -225,7 +155,7 @@ The golden query file now supports an optional `reference_answer`. The included 
 ]
 ```
 
-Run the judge with the optional OpenAI dependency and API key:
+Run the judge with the `llm-judge` extra and `OPENAI_API_KEY` configured:
 
 ```bash
 python -m reranking_strategies.cli judge-answers \
@@ -235,47 +165,120 @@ python -m reranking_strategies.cli judge-answers \
   --output reports/answer-judge.json
 ```
 
-The judge returns per-sample and per-strategy mean scores on a **0–4 scale** for:
+The included answerable queries have initial reference answers derived from the corpus; the unanswerable query has no reference answer. Have a human review these labels before treating them as evaluation ground truth. No live answer-judge results are included in this repository yet.
 
-| Score | What it measures | Score of 4 |
-| --- | --- | --- |
-| Correctness | Agreement with the reference answer | Correct and complete for the query |
-| Groundedness | Support for factual claims in the supplied evidence | All material claims are supported |
-| Assertiveness calibration | Whether certainty is proportional to evidence; low scores penalize confident unsupported claims and also needless hedging when evidence is clear | Claims are appropriately qualified |
-| Abstention correctness | Whether an answer abstains for an unanswerable query and answers an answerable one | Correct decision; reported as a rate from 0 to 1 |
+## Graph-edge retrieval experiment
 
-The judge also returns unsupported claims, a short rationale, latency, request count, input/output tokens, and estimated cost. `assertiveness_calibration` measures evidence-relative overclaiming, not how confident or persuasive the writing sounds. Correctness and groundedness are separate: an answer may match the reference but lack support in the passages actually provided. The judge does not see the strategy label, reducing one source of scoring bias.
+The project also tests retrieving application relationships as evidence. An edge is stored as its own vector point with directed source and target IDs, relation, description, and supporting passage IDs. This is separate from the HNSW links Qdrant uses internally to search vectors. See [Qdrant points](https://qdrant.tech/documentation/concepts/points/) and [payload filtering](https://qdrant.tech/documentation/search/filtering/).
 
-These are model judgments, not ground truth. Blindly sample outputs for human review, compare judge scores with human labels, and check disagreement before using the scores to select a production system. Keep the judge model fixed across strategies; where practical, use a judge different from the answer generator. **Live answer-judge scores have not been collected in this checkout** because no `OPENAI_API_KEY` is configured.
+The small example dataset is in [`edges.json`](data/edges.json), with six labeled queries in [`edge_golden.json`](data/edge_golden.json). Run the BM25 experiment locally or include dense/hybrid retrieval with Qdrant:
 
-## Scalability and illustrative monthly cost
+```bash
+python -m reranking_strategies.cli benchmark-edges \
+  --output reports/edges-bm25.json
 
-The retrieval and reranking stages are separable, which gives the design room to scale: keep the API/workers stateless, scale query workers independently, and size or shard the vector store for the corpus and query load. The current implementation is a research prototype, though: Compose runs one Qdrant node, and the included benchmarks contain only six queries and 19 edges. Those smoke runs do **not** establish production throughput, high availability, or a million-request capacity. The code currently rebuilds its demo collection from a corpus snapshot during evaluation; production ingestion should be an independent, incremental process.
+docker compose up -d qdrant
+pip install -e '.[qdrant]'
+python -m reranking_strategies.cli benchmark-edges --dense \
+  --output reports/edges-qdrant.json
+```
 
-One million requests in a 30-day month averages about **0.39 requests/second** (about 1,370/hour). At a 10x peak that is about 3.9 requests/second. This average is not a sizing target by itself: request bursts, corpus/vector count and dimensions, filters, candidate count, concurrent ingestion, latency SLO, and whether each request makes one or several model calls all matter. Before claiming capacity, run a representative load test with production-sized vectors and payloads, peak traffic, concurrent writes, and failure/recovery scenarios; measure p95/p99 latency, errors, CPU, memory, disk I/O, and recall.
+After retrieving an edge, its `evidence_ids` identify passages to fetch as support. Searches can also filter on indexed fields such as source, relation, and target. The current implementation retrieves and reranks individual edges; it does not identify entities from arbitrary questions or expand multi-hop paths. A path-search experiment should have its own labels and metrics because it is a different task.
 
-The table below is a **compute-only baseline estimate**, not a production architecture recommendation. It assumes one always-on Linux VM for a self-managed Qdrant node, 2 vCPU and 8 GiB RAM, 730 hours/month, on-demand rates, and USD. Approximate public list rates checked **2026-10-29**: AWS `m7i.large` at $0.1008/hour (instance specs: [AWS M7i](https://aws.amazon.com/ec2/instance-types/m7i/); verify the selected region/rate with the [AWS pricing page/calculator](https://aws.amazon.com/ec2/pricing/on-demand/)), GCP `e2-standard-2` at $0.06701142/hour ([Compute Engine pricing](https://cloud.google.com/products/compute/pricing/general-purpose)), and Azure `Standard_D2s_v5` Linux in East US at $0.096/hour ([Linux VM pricing](https://azure.microsoft.com/en-us/pricing/details/virtual-machines/linux/) and [Retail Prices API](https://learn.microsoft.com/en-us/rest/api/cost-management/retail-prices/azure-retail-prices)). Region and OS can change the price.
+### Edge benchmark result
 
-| Provider / example VM | Approx. VM cost for 730 h | With 1M GPT-6 Luna listwise calls | With 1M GPT-6.1 Terra listwise calls |
+One local Docker run over 19 edge points and six queries (`candidate_k=10`, `metric_k=5`). Quality metrics are means; p95 latency is for the named stage. This is a smoke benchmark, not a performance claim.
+
+| Retrieval | Ranking | Recall@5 | MRR@5 | nDCG@5 | Stage p95 (ms) |
+| --- | --- | ---: | ---: | ---: | ---: |
+| BM25 | Retrieval only | 0.736 | 0.750 | 0.764 | 0.096 |
+| BM25 | Heuristic | 0.750 | 0.667 | 0.711 | 0.050 |
+| BM25 | MMR | 0.736 | 0.750 | 0.762 | 0.632 |
+| BM25 | Edge structure | 0.736 | 0.750 | 0.762 | 0.047 |
+| Dense | Retrieval only | 0.750 | 0.833 | 0.797 | 5.417 |
+| Dense | Heuristic | 0.750 | 0.667 | 0.711 | 0.134 |
+| Dense | MMR | 0.750 | 0.833 | 0.784 | 1.328 |
+| Dense | Edge structure | 0.750 | 0.833 | 0.797 | 0.097 |
+| Hybrid RRF | Retrieval only | 0.792 | 0.833 | **0.816** | 4.804 |
+| Hybrid RRF | Heuristic | 0.750 | 0.667 | 0.711 | 0.125 |
+| Hybrid RRF | MMR | 0.750 | 0.833 | 0.758 | 1.285 |
+| Hybrid RRF | Edge structure | 0.792 | 0.750 | 0.770 | 0.100 |
+
+On this dataset, hybrid retrieval alone ranks the labeled edges best. The structural reranker tied dense retrieval but lowered hybrid nDCG. There is not enough evidence to recommend an edge reranker by default; more reviewed edge labels and multi-hop queries are needed. Live LLM edge ranking is available with `benchmark-edges --live-llm`, but has not been measured here.
+
+## Passage benchmark result
+
+One local Docker-backed run on the included six-query synthetic set (`candidate_k=10`, `metric_k=5`). Quality metrics are means; p95 latency is for the retrieval or reranking stage. The LLM columns are zero because these strategies do not call an LLM.
+
+| Retrieval | Ranking | Recall@5 | MRR@5 | nDCG@5 | Stage p95 (ms) | LLM calls / retries | Estimated cost |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| BM25 | Retrieval only | 0.778 | 0.667 | 0.710 | 0.018 | 0 / 0 | $0 |
+| BM25 | Heuristic | 0.833 | 0.750 | **0.744** | 0.036 | 0 / 0 | $0 |
+| BM25 | MMR | 0.778 | 0.667 | 0.702 | 0.509 | 0 / 0 | $0 |
+| Dense | Retrieval only | 0.833 | 0.750 | 0.742 | 6.383 | 0 / 0 | $0 |
+| Dense | Heuristic | 0.833 | 0.750 | **0.744** | 0.110 | 0 / 0 | $0 |
+| Dense | MMR | 0.833 | 0.750 | 0.738 | 1.396 | 0 / 0 | $0 |
+| Hybrid RRF | Retrieval only | 0.833 | 0.667 | 0.734 | 5.615 | 0 / 0 | $0 |
+| Hybrid RRF | Heuristic | 0.833 | 0.750 | **0.744** | 0.107 | 0 / 0 | $0 |
+| Hybrid RRF | MMR | 0.722 | 0.639 | 0.675 | 1.395 | 0 / 0 | $0 |
+
+Heuristic reranking had the highest measured nDCG in each retrieval mode in this run. MMR did not improve the result and reduced hybrid nDCG. The candidate set also limits the best possible reranker score. These small timing values depend on the machine and run; repeat the experiment on a representative corpus before making a design choice. Live LLM quality, latency, and cost results are not available because no API results have been recorded.
+
+## Scalability and monthly cost estimate
+
+One million requests in a 30-day month averages about **0.39 requests/second**; a 10x peak is about 3.9 requests/second. That average alone does not size a service. Corpus size, vector dimensions, filters, candidate depth, bursts, ingestion, latency targets, and additional LLM calls all affect capacity.
+
+This checkout runs a single local Qdrant node and benchmarks only six queries and 19 edges. It has not been load-tested for production throughput or high availability. Its evaluation replaces the demo collection from a corpus snapshot; a production service should separate incremental ingestion from query serving. Validate any deployment using production-sized vectors and payloads, peak traffic, concurrent writes, and failure/recovery tests. Measure p95/p99 latency, errors, CPU, memory, disk I/O, and recall.
+
+The following is a **compute-only planning estimate**, not a production architecture. It assumes one always-on Linux VM hosting self-managed Qdrant, 2 vCPU, 8 GiB RAM, 730 hours/month, on-demand rates, USD, and approximate list prices checked 2026-10-29. Rates vary by region and OS. AWS `m7i.large` specifications are listed by [AWS](https://aws.amazon.com/ec2/instance-types/m7i/) and its rate should be checked with the [AWS pricing page/calculator](https://aws.amazon.com/ec2/pricing/on-demand/). GCP price is from [Compute Engine pricing](https://cloud.google.com/products/compute/pricing/general-purpose); Azure East US price is from [Linux VM pricing](https://azure.microsoft.com/en-us/pricing/details/virtual-machines/linux/) and its [Retail Prices API](https://learn.microsoft.com/en-us/rest/api/cost-management/retail-prices/azure-retail-prices).
+
+| Provider and example VM | VM for 730 hours | With 1M GPT-6 Luna listwise calls | With 1M GPT-6.1 Terra listwise calls |
 | --- | ---: | ---: | ---: |
 | AWS `m7i.large` | $73.58 | $273.58 | $2,073.58 |
 | GCP `e2-standard-2` | $48.92 | $248.92 | $2,048.92 |
 | Azure `Standard_D2s_v5` (East US) | $70.08 | $270.08 | $2,070.08 |
 
-For the LLM columns, assume exactly one listwise call per user request, **1,500 uncached input tokens plus 100 output tokens per call**, standard short-context API pricing, and no retries. That is 1.5B input and 100M output tokens per month. At the [OpenAI API rates](https://developers.openai.com/api/docs/pricing) checked 2026-10-29 ($0.10/$0.50 per million input/output tokens for GPT-6 Luna; $1/$5 for GPT-6.1 Terra), estimated model charges are **$200/month** and **$2,000/month**, respectively. A one-retry pipeline that sends 10% of requests to Terra after Luna would add about $200 in this same token scenario (about $400 total model cost). The corresponding combined baseline totals would be about $474 AWS, $449 GCP, and $470 Azure. A judge used in addition to ranking adds its own tokens and calls; score it separately. Actual prompts include candidate text, so measure real token usage from benchmark reports rather than assuming this example.
+The model estimates assume one LLM call per user request with 1,500 uncached input tokens and 100 output tokens, no retries, and standard short-context rates from the [OpenAI API pricing page](https://developers.openai.com/api/docs/pricing), checked 2026-10-29. That is 1.5B input and 100M output tokens/month: about **$200 with GPT-6 Luna** or **$2,000 with GPT-6.1 Terra**. A Luna primary with a Terra fallback on 10% of requests adds about $200 in this token scenario (about $400 total model spend). A judge called in addition to ranking also adds tokens and requests. Actual prompts include candidate text, so use measured token counts for a real forecast.
 
-Pairwise ranking can be much more expensive: comparing every pair in a shortlist of five can require up to 10 comparator calls per query. If each comparison had the same assumed token footprint above, that would be about **$2,000 with Luna or $20,000 with Terra per million queries**, before vector infrastructure. This is a deliberately conservative token scenario; actual per-comparison prompts may be smaller, and early stopping/call caps can reduce usage. Repeated retrieval, retries, and answer judging also add latency and cost. The cloud VM column does not include disks/snapshots, managed vector-database fees, replicas or a multi-node cluster, API/worker compute, load balancers, monitoring/logging, network egress, backups, support, taxes, or discounts. A single VM has no high availability. Treat the totals as a planning floor and use each provider's calculator for a deployment-specific estimate.
+Pairwise ranking over a five-item shortlist can make up to 10 comparisons per query. If every comparison used the same token allowance above, one million queries would cost about **$2,000 with Luna or $20,000 with Terra**, before infrastructure. Actual pairwise prompts may be smaller; call limits and early stopping may reduce usage.
+
+The VM estimates exclude storage, snapshots, replicas or a multi-node cluster, managed vector database fees, API/worker compute, load balancers, logs and monitoring, egress, backups, support, taxes, and discounts. A single VM has no high availability. Use the linked provider calculators and real token/traffic measurements for a deployment-specific budget.
+
+## Project layout
+
+| Path | Contents |
+| --- | --- |
+| `src/reranking_strategies/retrieval.py` | BM25, dense search integration, and RRF fusion |
+| `src/reranking_strategies/rerankers.py` | Heuristic, MMR, cross-encoder, listwise, pairwise, retry, and edge ranking |
+| `src/reranking_strategies/evaluation.py`, `metrics.py` | Evaluation orchestration and ranking metrics |
+| `src/reranking_strategies/answer_judging.py` | LLM-based evaluation of generated answers |
+| `src/reranking_strategies/qdrant_store.py` | Qdrant indexing, filtering, and search adapter |
+| `data/` | Example passages, graph edges, and labeled query sets |
+| `tests/` | Offline unit tests and optional Qdrant integration tests |
 
 ## Tests
 
-Run the offline unit suite with:
+Run the offline suite:
 
 ```bash
 python -m unittest discover -s tests -v
 ```
 
-The GitHub Actions workflow runs those tests and a Qdrant integration test against the Docker Compose service on each push and pull request. Optional cross-encoder and OpenAI calls are not required by the offline suite.
+Run the Qdrant integration tests against the Docker service:
 
-## Scope and limitations
+```bash
+docker compose up -d qdrant
+RERANKING_QDRANT_URL=http://localhost:6333 \
+  python -m unittest discover -s tests -p 'test_qdrant_store.py' -v
+docker compose down
+```
 
-The included corpus is synthetic and useful for controlled regression checks, not for making quality claims about a production corpus. For meaningful comparisons, build a manually reviewed golden set, keep held-out queries untouched during tuning, and measure quality and latency on representative traffic. This project evaluates ranking; it does not fine-tune or deploy a reranker.
+GitHub Actions runs the unit and Qdrant integration suites on pushes and pull requests. Tests use fake model clients; live OpenAI calls are optional and are not part of the test suite.
+
+## What this project does not claim
+
+- The synthetic golden set is not representative of a production workload.
+- The benchmark numbers do not prove that a reranker will improve another corpus.
+- LLM judge scores are not human ground truth and need calibration and review.
+- The single-node local Qdrant setup is not a highly available deployment.
+- The project evaluates retrieval and ranking; it does not generate answers, operate a RAG application, or fine-tune models.
