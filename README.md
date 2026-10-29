@@ -82,19 +82,23 @@ python -m reranking_strategies.cli evaluate --dense \
 
 FastEmbed downloads its embedding model on first use. The evaluation adapter replaces the configured demo collection with the current corpus snapshot, including removing stale points. Stop Qdrant with `docker compose down`.
 
-## Reranking methods
+## Strategy guide: what to use and when
 
-The evaluation can compare these approaches on the same retrieved candidate set:
+Use retrieval to find a candidate set; use reranking to improve that set's order. Start with a retrieval-only baseline, then add the least expensive strategy that addresses the measured failure.
 
-| Method | How it ranks candidates | When it is useful to test |
-| --- | --- | --- |
-| Retrieval only | Keeps the retriever's order | Baseline for measuring whether reranking adds value |
-| Heuristic | Scores lexical overlap and title matches | Fast, transparent baseline with no external model |
-| MMR | Balances relevance with diversity among selected passages | Tests whether redundant evidence is crowding out useful coverage |
-| Cross-encoder | Scores each query-passage pair with a local model | Higher-quality local ranking when model compute and latency are acceptable |
-| Listwise LLM judge | Gives a candidate set to a model and asks it to order the candidates | One model call can rank a shortlist; prompt size grows with candidate text |
-| Pairwise LLM judge | Asks a comparator to choose between candidates, then sorts the results | Tests pair judgments; call count can grow quadratically with shortlist size |
-| Bounded fallback | Calls a primary listwise model, then one fallback if reported confidence is below a threshold | Tests whether a second attempt helps enough to justify its latency and cost |
+| Strategy | What it does | Use it when | Trade-off and this project's evidence |
+| --- | --- | --- | --- |
+| **BM25 retrieval** | Finds candidates by matching query and passage terms. | Exact terms, names, IDs, and error codes matter. | Fast and easy to inspect; misses paraphrases. Included as the offline baseline. |
+| **Dense retrieval** | Finds candidates by vector similarity between query and passage meaning. | The query and source use different wording. | Captures semantic similarity; may miss exact identifiers. This project uses Qdrant and FastEmbed. |
+| **Hybrid retrieval (RRF)** | Combines BM25 and dense rankings with reciprocal rank fusion. | Both exact terms and semantic matches matter. | Adds a component to tune. It achieved the highest edge nDCG in the small edge run, before reranking. |
+| **Retrieval only** | Passes the retriever's order through unchanged. | You need a baseline to determine whether reranking helps. | No additional model cost or reranking stage. It is not itself a reranker. |
+| **Heuristic reranking** | Reorders by lexical overlap and title matches. | You need a cheap, transparent first reranker. | Limited semantic understanding. It had the best measured passage nDCG in the included six-query run. |
+| **MMR** | Balances relevance with diversity among selected passages. | Top results repeat the same fact and broader coverage is useful. | Diversity can push down multiple relevant passages. It lowered nDCG in the included run. |
+| **Cross-encoder** | Scores each query-passage pair jointly with a local model. | A general reranker is not accurate enough and the candidate set is small. | More compute per candidate than vector retrieval; evaluate on the actual shortlist. Implemented, but not measured in the published result table. |
+| **Listwise LLM judge** | Gives a candidate set to an LLM and asks it to order the passages. | You want flexible reasoning over a small shortlist. | One request can rank several items, but prompt size grows with candidate text. Live quality results are not yet recorded. |
+| **Pairwise LLM judge** | Asks an LLM to choose between candidates, then sorts from the comparisons. | Head-to-head judgments are valuable on a very short list. | Up to `n(n-1)/2` calls for `n` candidates; five candidates can mean ten comparisons. Live quality results are not yet recorded. |
+| **Bounded fallback** | Calls a primary listwise model and retries once with a fallback under a condition. | You want to test whether a second attempt helps harder cases. | Adds latency and cost. Current trigger is model-reported confidence, not a calibrated probability; live quality results are not yet recorded. |
+| **Edge-structure reranking** | Mixes retrieval score (75%) with lexical overlap across edge endpoints, relation, and description (25%). | The retrieved records are graph relationships and their structure matters. | Did not improve the small hybrid edge result: nDCG@5 was 0.770 versus 0.816 for hybrid retrieval alone. |
 
 To add the optional cross-encoder:
 
@@ -102,6 +106,23 @@ To add the optional cross-encoder:
 pip install -e '.[cross-encoder]'
 python -m reranking_strategies.cli evaluate --cross-encoder
 ```
+
+### Should we fine-tune a reranker?
+
+**Not yet for this sample corpus.** Fine-tuning is useful when a general cross-encoder still makes important, repeatable mistakes on a real target domain and you have enough reviewed examples to train and test against. This project's six synthetic queries are far too few, and the current benchmark has not established that a cross-encoder is the bottleneck.
+
+Fine-tuning changes the model using examples of the relevance behavior you want. For a cross-encoder reranker, each example is a `(query, passage)` pair with a relevance label. A practical dataset should include:
+
+- Positive passages that genuinely answer or support the query.
+- **Hard negatives** returned by the same first-stage retriever that look relevant but do not answer the query.
+- Human-reviewed relevance labels. Do not treat every unclicked or unlabeled passage as irrelevant.
+- Query-disjoint train, validation, and test splits, so passages for one query do not leak across splits.
+
+With binary labels, train a scalar cross-encoder score using a binary classification loss. With preference or graded labels, use a ranking objective that teaches the model which passage should be above another. Sentence Transformers documents [cross-encoder training](https://sbert.net/docs/cross_encoder/training_overview.html), [reranking evaluators](https://sbert.net/docs/package_reference/cross_encoder/evaluation.html), and [training examples for rerankers](https://sbert.net/examples/cross_encoder/training/rerankers/README.html). Training should use negatives drawn from the candidates that production retrieval actually returns; otherwise the training task and serving task differ.
+
+For this project, the next implementation would be an optional `scripts/train_cross_encoder.py` plus a reviewed query/passage training dataset. It would save a versioned local checkpoint, then reuse the existing `--cross-encoder-model` option to compare that checkpoint with the original model using the same retrieval candidates and held-out queries. The final comparison should include nDCG/MRR, candidate recall, p95 latency, model size, and inference cost. **This repository does not currently include a training script or real training labels**; it can evaluate a cross-encoder, including a compatible local model path, but training is future work.
+
+Fine-tune only if the held-out evaluation shows a meaningful quality gain that is worth the additional training, hosting, and maintenance cost. If retrieval is missing the evidence, fix retrieval or candidate depth first. If the general reranker already meets the quality and latency targets, fine-tuning adds complexity without a demonstrated benefit.
 
 ### Live LLM ranking benchmark
 
