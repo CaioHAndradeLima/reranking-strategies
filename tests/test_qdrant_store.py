@@ -91,6 +91,37 @@ class QdrantDockerIntegrationTests(unittest.TestCase):
             if store.client.collection_exists(collection):
                 store.client.delete_collection(collection)
 
+    def test_edge_points_can_be_retrieved_by_indexed_endpoint_payload(self):
+        url = os.environ["RERANKING_QDRANT_URL"]
+        collection = f"reranking_edges_test_{uuid.uuid4().hex}"
+        store = QdrantDenseStore(url=url, collection=collection)
+        retry = Document(
+            "edge-retry", "retry worker — SCHEDULES → payment retries",
+            "The retry worker schedules invoice payment retries.",
+            {"kind": "edge", "source_id": "service:retry-worker", "relation": "SCHEDULES",
+             "target_id": "process:invoice-retries"},
+        )
+        catalog = Document(
+            "edge-catalog", "catalog team — OWNS → product descriptions",
+            "The catalog team owns product descriptions.",
+            {"kind": "edge", "source_id": "team:catalog", "relation": "OWNS",
+             "target_id": "data:product-descriptions"},
+        )
+        documents = {retry.id: retry, catalog.id: catalog}
+        try:
+            store.index(
+                list(documents.values()),
+                indexed_payload_fields=("kind", "source_id", "relation", "target_id"),
+            )
+            hits = store.search(
+                "Which service schedules retries?", documents, limit=2,
+                filters={"kind": "edge", "source_id": "service:retry-worker"},
+            )
+            self.assertEqual([hit.document.id for hit in hits], ["edge-retry"])
+        finally:
+            if store.client.collection_exists(collection):
+                store.client.delete_collection(collection)
+
 
 if __name__ == "__main__":
     unittest.main()

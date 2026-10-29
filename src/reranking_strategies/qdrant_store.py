@@ -24,7 +24,11 @@ class QdrantDenseStore:
                 models = qdrant_models
         self.client, self.models, self.collection = client, models, collection
 
-    def index(self, documents: list[Document]) -> None:
+    def index(
+        self,
+        documents: list[Document],
+        indexed_payload_fields: tuple[str, ...] | list[str] = (),
+    ) -> None:
         if len({doc.id for doc in documents}) != len(documents):
             raise ValueError("Document IDs must be unique when indexing a Qdrant collection")
 
@@ -39,19 +43,49 @@ class QdrantDenseStore:
                 distance=self.models.Distance.COSINE,
             ),
         )
+        for field in indexed_payload_fields:
+            self.client.create_payload_index(
+                collection_name=self.collection,
+                field_name=field,
+                field_schema=self.models.PayloadSchemaType.KEYWORD,
+            )
         if documents:
             self.client.upload_collection(
                 collection_name=self.collection,
                 vectors=[self.models.Document(text=doc.searchable_text, model=MODEL) for doc in documents],
-                payload=[{"document_id": doc.id, "title": doc.title, "text": doc.text,
-                          "metadata": doc.metadata} for doc in documents],
+                payload=[{
+                    **doc.metadata,
+                    "kind": doc.metadata.get("kind", "document"),
+                    "document_id": doc.id,
+                    "title": doc.title,
+                    "text": doc.text,
+                    "metadata": doc.metadata,
+                } for doc in documents],
                 ids=list(range(len(documents))),
             )
 
-    def search(self, query: str, documents: dict[str, Document], limit: int = 10) -> list[Hit]:
+    def search(
+        self,
+        query: str,
+        documents: dict[str, Document],
+        limit: int = 10,
+        filters: dict[str, str | int | bool] | None = None,
+    ) -> list[Hit]:
+        query_filter = None
+        if filters:
+            if any(not isinstance(key, str) or not key for key in filters):
+                raise ValueError("Payload filter keys must be non-empty strings")
+            query_filter = self.models.Filter(must=[
+                self.models.FieldCondition(
+                    key=key,
+                    match=self.models.MatchValue(value=value),
+                )
+                for key, value in filters.items()
+            ])
         response = self.client.query_points(
             collection_name=self.collection,
             query=self.models.Document(text=query, model=MODEL), limit=limit,
+            query_filter=query_filter,
         )
         hits = []
         for point in response.points:

@@ -1,0 +1,8 @@
+[
+  {"id":"edge-q-001","query":"Which service owns invoice payment retries?","relevance":{"edge-001":3,"edge-002":2,"edge-004":1},"tags":["relationship","multi_relevant"]},
+  {"id":"edge-q-002","query":"What happened in INC-4821?","relevance":{"edge-009":3,"edge-010":3},"tags":["causal","remediation"]},
+  {"id":"edge-q-003","query":"How long are security audit events retained?","relevance":{"edge-013":3,"edge-014":1},"tags":["attribute","exact_fact"]},
+  {"id":"edge-q-004","query":"How do I find a stuck payment retry?","relevance":{"edge-015":3,"edge-016":3,"edge-017":2,"edge-018":1},"tags":["procedural","multi_edge"]},
+  {"id":"edge-q-005","query":"Who owns catalog product descriptions?","relevance":{"edge-019":3},"tags":["ownership"]},
+  {"id":"edge-q-006","query":"What is the retention period for chat recordings?","relevance":{},"tags":["unanswerable"],"answerable":false}
+]

@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 
 from .answer_judging import OpenAIAnswerJudge, evaluate_answers
-from .data import load_documents, load_queries, validate_dataset
+from .data import load_documents, load_edges, load_queries, validate_dataset
 from .evaluation import evaluate, recommend_best_strategy
 from .pricing import (
     CallBudget,
@@ -13,6 +13,7 @@ from .pricing import (
 )
 from .rerankers import (
     CrossEncoderReranker,
+    EdgeStructureReranker,
     HeuristicReranker,
     MMRReranker,
     OpenAIPairwiseJudge,
@@ -27,9 +28,13 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Evaluate retrieval and reranking strategies")
-    parser.add_argument("command", choices=["evaluate", "benchmark", "judge-answers"])
+    parser.add_argument(
+        "command", choices=["evaluate", "benchmark", "benchmark-edges", "judge-answers"]
+    )
     parser.add_argument("--documents", default=str(ROOT / "data/documents.json"))
     parser.add_argument("--queries", default=str(ROOT / "data/golden.json"))
+    parser.add_argument("--edges", default=str(ROOT / "data/edges.json"))
+    parser.add_argument("--edge-queries", default=str(ROOT / "data/edge_golden.json"))
     parser.add_argument("--output", default="")
     parser.add_argument("--answers", default="", help="JSON answer samples for judge-answers")
     parser.add_argument("--judge-model", default="gpt-6-luna", help="Model used by judge-answers")
@@ -55,8 +60,15 @@ def main() -> None:
     parser.add_argument("--cross-encoder-model", default="cross-encoder/ms-marco-MiniLM-L-6-v2")
     args = parser.parse_args()
 
-    documents = load_documents(args.documents)
-    queries = load_queries(args.queries)
+    evidence_documents = load_documents(args.documents)
+    edge_mode = args.command == "benchmark-edges"
+    if edge_mode:
+        edges = load_edges(args.edges, evidence_documents)
+        documents = [edge.as_document() for edge in edges]
+        queries = load_queries(args.edge_queries)
+    else:
+        documents = evidence_documents
+        queries = load_queries(args.queries)
     validate_dataset(documents, queries)
     if args.command == "judge-answers":
         if not args.answers:
@@ -102,11 +114,14 @@ def main() -> None:
         parser.error("--pairwise-candidates must be positive")
     bm25 = BM25Retriever(documents)
     rerankers = [HeuristicReranker(), MMRReranker()]
+    if edge_mode:
+        rerankers.append(EdgeStructureReranker())
     llm_enabled = args.llm_reranker or args.llm_pairwise or args.llm_loop or args.live_llm
     estimated_llm_calls = 0
-    if args.command == "evaluate" and (args.live_llm or args.with_pairwise or args.with_loop):
+    benchmark_mode = args.command in {"benchmark", "benchmark-edges"}
+    if not benchmark_mode and (args.live_llm or args.with_pairwise or args.with_loop):
         parser.error("--live-llm, --with-pairwise, and --with-loop are benchmark-only options")
-    if args.command == "benchmark":
+    if benchmark_mode:
         if (args.with_pairwise or args.with_loop) and not args.live_llm:
             parser.error("--with-pairwise and --with-loop require --live-llm in benchmark mode")
         if args.live_llm:
@@ -190,8 +205,17 @@ def main() -> None:
     if args.dense:
         from .qdrant_store import QdrantDenseStore
 
-        store = QdrantDenseStore(url=args.qdrant_url)
-        store.index(documents)
+        store = QdrantDenseStore(
+            url=args.qdrant_url,
+            collection="reranking_edge_demo" if edge_mode else "reranking_demo",
+        )
+        if edge_mode:
+            store.index(
+                documents,
+                indexed_payload_fields=("kind", "source_id", "relation", "target_id"),
+            )
+        else:
+            store.index(documents)
         by_id = {doc.id: doc for doc in documents}
         dense = lambda query, limit: store.search(query, by_id, limit)
         hybrid = lambda query, limit: rrf_fuse(
@@ -204,8 +228,11 @@ def main() -> None:
         name: recommend_best_strategy(result["summary"], args.selection_metric)
         for name, result in reports.items()
     }
-    if args.command == "benchmark":
+    if benchmark_mode:
         report["experiment"] = {
+            "corpus_type": "graph_edges" if edge_mode else "passages",
+            "edge_count": len(documents) if edge_mode else None,
+            "evidence_document_count": len(evidence_documents) if edge_mode else None,
             "live_llm": args.live_llm,
             "models": benchmark_models if args.live_llm else [],
             "with_pairwise": args.with_pairwise,
