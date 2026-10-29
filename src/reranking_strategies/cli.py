@@ -3,8 +3,22 @@ import json
 from pathlib import Path
 
 from .data import load_documents, load_queries, validate_dataset
-from .evaluation import evaluate
-from .rerankers import CrossEncoderReranker, HeuristicReranker, MMRReranker, OpenAIListwiseReranker
+from .evaluation import evaluate, recommend_best_strategy
+from .pricing import (
+    CallBudget,
+    OPENAI_STANDARD_RATES_PER_MILLION,
+    PRICING_AS_OF,
+    PRICING_SOURCE,
+)
+from .rerankers import (
+    CrossEncoderReranker,
+    HeuristicReranker,
+    MMRReranker,
+    OpenAIPairwiseJudge,
+    OpenAIListwiseReranker,
+    PairwiseJudgeReranker,
+    RetryingReranker,
+)
 from .retrieval import BM25Retriever, rrf_fuse
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -12,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Evaluate retrieval and reranking strategies")
-    parser.add_argument("command", choices=["evaluate"])
+    parser.add_argument("command", choices=["evaluate", "benchmark"])
     parser.add_argument("--documents", default=str(ROOT / "data/documents.json"))
     parser.add_argument("--queries", default=str(ROOT / "data/golden.json"))
     parser.add_argument("--output", default="")
@@ -21,6 +35,19 @@ def main() -> None:
     parser.add_argument("--dense", action="store_true", help="Index and compare dense/hybrid Qdrant retrieval")
     parser.add_argument("--qdrant-url", default="http://localhost:6333")
     parser.add_argument("--llm-reranker", action="store_true", help="Use optional OpenAI listwise reranking")
+    parser.add_argument("--llm-model", default="gpt-6-luna")
+    parser.add_argument("--llm-pairwise", action="store_true", help="Use optional OpenAI pairwise judging")
+    parser.add_argument("--llm-loop", action="store_true", help="Retry low-confidence listwise rankings once")
+    parser.add_argument("--llm-fallback-model", default="gpt-6.1-terra")
+    parser.add_argument("--retry-confidence-threshold", type=float, default=0.6)
+    parser.add_argument("--live-llm", action="store_true", help="Add model comparisons to benchmark")
+    parser.add_argument("--benchmark-models", default="gpt-6-luna,gpt-6.1-terra")
+    parser.add_argument("--with-pairwise", action="store_true", help="Include pairwise methods in benchmark")
+    parser.add_argument("--with-loop", action="store_true", help="Include one-retry pipelines in benchmark")
+    parser.add_argument("--max-llm-calls", type=int, default=200, help="Hard request cap for one run")
+    parser.add_argument("--pairwise-candidates", type=int, default=5,
+                        help="Pairwise judge only compares the top candidate shortlist")
+    parser.add_argument("--selection-metric", choices=["recall", "mrr", "ndcg"], default="ndcg")
     parser.add_argument("--cross-encoder", action="store_true", help="Use optional local cross-encoder reranking")
     parser.add_argument("--cross-encoder-model", default="cross-encoder/ms-marco-MiniLM-L-6-v2")
     args = parser.parse_args()
@@ -28,10 +55,92 @@ def main() -> None:
     documents = load_documents(args.documents)
     queries = load_queries(args.queries)
     validate_dataset(documents, queries)
+    if args.pairwise_candidates <= 0:
+        parser.error("--pairwise-candidates must be positive")
     bm25 = BM25Retriever(documents)
     rerankers = [HeuristicReranker(), MMRReranker()]
-    if args.llm_reranker:
-        rerankers.append(OpenAIListwiseReranker())
+    llm_enabled = args.llm_reranker or args.llm_pairwise or args.llm_loop or args.live_llm
+    estimated_llm_calls = 0
+    if args.command == "evaluate" and (args.live_llm or args.with_pairwise or args.with_loop):
+        parser.error("--live-llm, --with-pairwise, and --with-loop are benchmark-only options")
+    if args.command == "benchmark":
+        if (args.with_pairwise or args.with_loop) and not args.live_llm:
+            parser.error("--with-pairwise and --with-loop require --live-llm in benchmark mode")
+        if args.live_llm:
+            benchmark_models = [model.strip() for model in args.benchmark_models.split(",") if model.strip()]
+            if not benchmark_models or len(benchmark_models) != len(set(benchmark_models)):
+                parser.error("--benchmark-models must contain unique, comma-separated model IDs")
+            if args.with_loop and len(benchmark_models) < 2:
+                parser.error("--with-loop requires at least two models in --benchmark-models")
+            per_pairwise_model = min(args.pairwise_candidates, args.candidate_k)
+            estimated_calls_per_query = len(benchmark_models)
+            if args.with_pairwise:
+                estimated_calls_per_query += len(benchmark_models) * (
+                    per_pairwise_model * (per_pairwise_model - 1) // 2
+                )
+            if args.with_loop:
+                estimated_calls_per_query += 2  # primary plus one possible fallback
+            estimated_calls = estimated_calls_per_query * len(queries) * (3 if args.dense else 1)
+            estimated_llm_calls = estimated_calls
+            if estimated_calls > args.max_llm_calls:
+                parser.error(
+                    f"estimated worst-case {estimated_calls} LLM calls exceeds --max-llm-calls "
+                    f"({args.max_llm_calls}); reduce pairwise candidates/models or raise the cap"
+                )
+            try:
+                from openai import OpenAI
+            except ImportError as exc:
+                raise RuntimeError("Install with: pip install -e '.[llm-judge]'") from exc
+            client = OpenAI()
+            budget = CallBudget(args.max_llm_calls)
+            rerankers.extend(OpenAIListwiseReranker(model, client, budget) for model in benchmark_models)
+            if args.with_pairwise:
+                for model in benchmark_models:
+                    judge = OpenAIPairwiseJudge(model, client, budget)
+                    rerankers.append(PairwiseJudgeReranker(
+                        judge, candidate_limit=args.pairwise_candidates
+                    ))
+            if args.with_loop:
+                primary = OpenAIListwiseReranker(benchmark_models[0], client, budget)
+                fallback = OpenAIListwiseReranker(benchmark_models[-1], client, budget)
+                rerankers.append(RetryingReranker(
+                    primary, fallback, confidence_threshold=args.retry_confidence_threshold
+                ))
+        elif args.llm_reranker or args.llm_pairwise or args.llm_loop:
+            parser.error("Use --live-llm with the benchmark command to compare model-based methods")
+    elif llm_enabled:
+        pairwise_size = min(args.pairwise_candidates, args.candidate_k)
+        estimated_calls_per_query = (1 if args.llm_reranker else 0)
+        if args.llm_pairwise:
+            estimated_calls_per_query += pairwise_size * (pairwise_size - 1) // 2
+        if args.llm_loop:
+            estimated_calls_per_query += 2
+        estimated_calls = estimated_calls_per_query * len(queries) * (3 if args.dense else 1)
+        estimated_llm_calls = estimated_calls
+        if estimated_calls > args.max_llm_calls:
+            parser.error(
+                f"estimated worst-case {estimated_calls} LLM calls exceeds --max-llm-calls "
+                f"({args.max_llm_calls}); reduce pairwise candidates or raise the cap"
+            )
+        try:
+            from openai import OpenAI
+        except ImportError as exc:
+            raise RuntimeError("Install with: pip install -e '.[llm-judge]'") from exc
+        client = OpenAI()
+        budget = CallBudget(args.max_llm_calls)
+        primary = OpenAIListwiseReranker(args.llm_model, client, budget)
+        if args.llm_reranker:
+            rerankers.append(primary)
+        if args.llm_pairwise:
+            judge = OpenAIPairwiseJudge(args.llm_model, client, budget)
+            rerankers.append(PairwiseJudgeReranker(
+                judge, candidate_limit=args.pairwise_candidates
+            ))
+        if args.llm_loop:
+            fallback = OpenAIListwiseReranker(args.llm_fallback_model, client, budget)
+            rerankers.append(RetryingReranker(
+                primary, fallback, confidence_threshold=args.retry_confidence_threshold
+            ))
     if args.cross_encoder:
         rerankers.append(CrossEncoderReranker(args.cross_encoder_model))
     reports = {"bm25": evaluate(queries, bm25.search, rerankers, args.candidate_k, args.metric_k)}
@@ -48,6 +157,27 @@ def main() -> None:
         reports["dense"] = evaluate(queries, dense, rerankers, args.candidate_k, args.metric_k)
         reports["hybrid_rrf"] = evaluate(queries, hybrid, rerankers, args.candidate_k, args.metric_k)
     report = {"retrieval_modes": reports}
+    report["recommendations"] = {
+        name: recommend_best_strategy(result["summary"], args.selection_metric)
+        for name, result in reports.items()
+    }
+    if args.command == "benchmark":
+        report["experiment"] = {
+            "live_llm": args.live_llm,
+            "models": benchmark_models if args.live_llm else [],
+            "with_pairwise": args.with_pairwise,
+            "with_retry_loop": args.with_loop,
+            "retry_confidence_threshold": args.retry_confidence_threshold if args.with_loop else None,
+            "pairwise_candidate_limit": args.pairwise_candidates if args.with_pairwise else None,
+            "candidate_k": args.candidate_k,
+            "metric_k": args.metric_k,
+            "selection_metric": args.selection_metric,
+            "max_llm_calls": args.max_llm_calls if args.live_llm else 0,
+            "estimated_worst_case_llm_calls": estimated_llm_calls,
+            "pricing_as_of": PRICING_AS_OF,
+            "pricing_source": PRICING_SOURCE,
+            "pricing_rates_usd_per_million_tokens": OPENAI_STANDARD_RATES_PER_MILLION,
+        }
     serialized = json.dumps(report, indent=2)
     if args.output:
         output = Path(args.output)
