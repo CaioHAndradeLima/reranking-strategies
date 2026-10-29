@@ -56,8 +56,13 @@ class MMRReranker:
         _validate_rerank_request(candidates, limit)
         if not candidates:
             return []
-        maximum = max((hit.score for hit in candidates), default=0.0) or 1.0
-        normalized = {hit.document.id: hit.score / maximum for hit in candidates}
+        minimum = min(hit.score for hit in candidates)
+        maximum = max(hit.score for hit in candidates)
+        score_range = maximum - minimum
+        normalized = {
+            hit.document.id: (hit.score - minimum) / score_range if score_range else 1.0
+            for hit in candidates
+        }
         selected, remaining = [], list(candidates)
         while remaining and len(selected) < limit:
             def mmr(hit: Hit) -> float:

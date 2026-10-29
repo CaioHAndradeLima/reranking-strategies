@@ -24,6 +24,16 @@ class RerankerTests(unittest.TestCase):
         self.assertEqual(reranker.rerank("retry", []), [])
         self.assertEqual(len(reranker.rerank("retry", candidates(), limit=1)), 1)
 
+    def test_mmr_preserves_order_of_negative_relevance_scores(self):
+        candidates_with_negative_scores = [
+            Hit(Document("a", "Lower", "lower score"), -0.9, "dense"),
+            Hit(Document("b", "Higher", "higher score"), -0.5, "dense"),
+        ]
+
+        result = MMRReranker(relevance_weight=1.0).rerank("query", candidates_with_negative_scores)
+
+        self.assertEqual([hit.document.id for hit in result], ["b", "a"])
+
     def test_rerankers_reject_duplicate_candidates_and_negative_limits(self):
         repeated = candidates() + [candidates()[0]]
         with self.assertRaisesRegex(ValueError, "Candidate document IDs must be unique"):
