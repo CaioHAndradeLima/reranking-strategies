@@ -15,6 +15,10 @@ def evaluate(
     candidate_k: int = 20,
     metric_k: int = 5,
 ) -> dict:
+    if type(candidate_k) is not int or candidate_k <= 0:
+        raise ValueError("candidate_k must be a positive integer")
+    if type(metric_k) is not int or metric_k <= 0:
+        raise ValueError("metric_k must be a positive integer")
     strategies: dict[str, list[dict[str, float]]] = defaultdict(list)
     rows = []
     rerankers = list(rerankers)
