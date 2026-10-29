@@ -6,21 +6,22 @@ The project runs keyword, vector, and hybrid retrieval against the same small co
 
 ## Start here
 
-### What you can learn from this project
+### Results achieved using different reranking strategies
 
-- Whether reranking improves the order of passages that retrieval already found.
-- How BM25, dense vector search, and hybrid retrieval compare on one labeled query set.
-- How heuristic, diversity-aware, cross-encoder, and LLM-based rerankers trade quality for latency and cost.
-- What an LLM-as-a-judge workflow can measure for both rankings and generated answers.
-- How to retrieve domain graph edges as evidence-bearing records and evaluate their ranking.
+These are the measured passage-ranking results from one local run over six synthetic queries. The evaluator retrieved 10 candidates and scored the top five. Each reranker received the same candidates within its retrieval mode.
 
-Reranking cannot recover evidence that the retriever missed. This is why the evaluation reports retrieval quality separately from reranking quality.
+| Strategy | Approach | nDCG@5: BM25 / dense / hybrid | Stage p95 ms: BM25 / dense / hybrid | Result in this run |
+| --- | --- | ---: | ---: | --- |
+| Retrieval only | Keep the order returned by BM25, dense search, or hybrid RRF. | 0.710 / 0.742 / 0.734 | 0.018 / 6.383 / 5.615 | Baseline. Dense retrieval led the individual modes; hybrid was close. |
+| Heuristic | Reorder by lexical overlap and title match. | **0.744 / 0.744 / 0.744** | 0.036 / 0.110 / 0.107 | Highest measured nDCG in all three modes. |
+| MMR | Balance relevance against similarity to already selected passages. | 0.702 / 0.738 / 0.675 | 0.509 / 1.396 / 1.395 | Did not improve on retrieval only; its diversity penalty lowered hybrid nDCG. |
+| Edge structure | Mix retrieval score (75%) with lexical overlap across edge endpoints, relation, and description (25%). | See edge result below | See edge result below | On 19 edges, it did not beat hybrid retrieval without reranking. |
 
-### Current results at a glance
+The separate graph-edge run used six queries and 19 edge points. Hybrid retrieval alone scored **0.816 nDCG@5**; the edge-structure reranker scored **0.770** on the same retrieval mode. This experiment does not support enabling that reranker by default.
 
-The checked-in golden set has six synthetic queries. In one local run with 10 retrieved candidates and a top-five evaluation cutoff, heuristic reranking had the best measured nDCG in each retrieval mode. Its nDCG@5 was 0.744 with BM25, dense retrieval, and hybrid retrieval. On the separate 19-edge dataset, hybrid retrieval without reranking had the highest measured nDCG@5 (0.816). These results are small-corpus smoke benchmarks, not evidence that the same methods will win on another dataset.
+Cross-encoder, listwise LLM, pairwise LLM, and bounded fallback methods are implemented, but their live/model-backed quality results have not been measured in this checkout. The LLM tests use fakes, so they verify request handling and accounting without making paid API calls. See the detailed [passage results](#passage-benchmark-result), [edge results](#edge-benchmark-result), and [LLM benchmark instructions](#live-llm-ranking-benchmark).
 
-Live LLM ranking and answer-judge results have **not** been collected in this checkout. The offline tests use fake LLM clients; they verify behavior and accounting without making paid API calls.
+These results come from tiny synthetic datasets and one local run; they do not predict performance on another corpus. Reranking cannot recover evidence retrieval missed, so compare candidate recall as well as ranking metrics.
 
 ### Quick start
 
