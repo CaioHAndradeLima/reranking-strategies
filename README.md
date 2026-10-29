@@ -168,6 +168,43 @@ python -m reranking_strategies.cli judge-answers \
 
 The included answerable queries have initial reference answers derived from the corpus; the unanswerable query has no reference answer. Have a human review these labels before treating them as evaluation ground truth. No live answer-judge results are included in this repository yet.
 
+### Calibrate judge scores against reviewer ratings
+
+The `calibrate-judge` command tests whether numeric judge scores track ratings from reviewers. Give it paired scores for each answer and dimension. Keep some labeled answers in a **calibration** split to fit the mapping, and a separate **validation** split to measure it. The command fits a monotonic isotonic mapping independently for correctness, groundedness, and assertiveness, then compares raw and adjusted score error on held-out ratings. It also reports how much reviewers disagreed with one another. The mapping adjusts score scale; it does not rewrite answers or make an unreliable judge trustworthy.
+
+A paired rating row looks like this:
+
+```json
+{
+  "sample_id": "q-003::dense+heuristic",
+  "dimension": "groundedness",
+  "split": "calibration",
+  "judge_score": 3,
+  "human_scores": [2, 3, 2]
+}
+```
+
+Store rows in a JSON object with `label_source: "human"` and a `records` array. Each row contains the LLM score and independent reviewer scores for the same answer and dimension. Use `calibration` and `validation` labels assigned before fitting. Each dimension needs at least five calibration rows, two validation rows, and two different judge-score values in the calibration split; a real study should use substantially more and cover the range of answer quality.
+
+```bash
+python -m reranking_strategies.cli calibrate-judge \
+  --ratings data/human_judge_ratings.json \
+  --output reports/judge-calibration.json
+```
+
+The report compares raw and calibrated mean absolute error, exact agreement, within-one-point agreement, and average judge bias on the held-out split. Review the reviewer-to-reviewer disagreement too: if people interpret the rubric differently, judge agreement has no single reliable target. Keep one final test set untouched while revising the rubric or judge prompt.
+
+To try the pipeline before collecting reviewer data, this repository includes a **fictional** dataset. Generate it and run the calibration:
+
+```bash
+python scripts/generate_judge_calibration_demo.py
+python -m reranking_strategies.cli calibrate-judge \
+  --ratings data/judge_calibration_demo.json \
+  --output reports/synthetic-judge-calibration.json
+```
+
+The demo invents latent scores, a judge with a known one-point bias, and three fictional reviewer-severity profiles. Its report is marked `synthetic_demo`; any improvement only shows the algorithm can recover this constructed bias. It is **not human data, not judge validation, and must not be presented as evidence** that a live model agrees with people. Replace it with independently collected ratings before making a quality claim.
+
 ## Graph-edge retrieval experiment
 
 The project also tests retrieving application relationships as evidence. An edge is stored as its own vector point with directed source and target IDs, relation, description, and supporting passage IDs. This is separate from the HNSW links Qdrant uses internally to search vectors. See [Qdrant points](https://qdrant.tech/documentation/concepts/points/) and [payload filtering](https://qdrant.tech/documentation/search/filtering/).
@@ -253,8 +290,10 @@ The VM estimates exclude storage, snapshots, replicas or a multi-node cluster, m
 | `src/reranking_strategies/rerankers.py` | Heuristic, MMR, cross-encoder, listwise, pairwise, retry, and edge ranking |
 | `src/reranking_strategies/evaluation.py`, `metrics.py` | Evaluation orchestration and ranking metrics |
 | `src/reranking_strategies/answer_judging.py` | LLM-based evaluation of generated answers |
+| `src/reranking_strategies/judge_calibration.py` | Isotonic score calibration and held-out comparison against reviewer ratings |
 | `src/reranking_strategies/qdrant_store.py` | Qdrant indexing, filtering, and search adapter |
 | `data/` | Example passages, graph edges, and labeled query sets |
+| `scripts/generate_judge_calibration_demo.py` | Reproducible synthetic ratings for exercising the calibration pipeline |
 | `tests/` | Offline unit tests and optional Qdrant integration tests |
 
 ## Tests

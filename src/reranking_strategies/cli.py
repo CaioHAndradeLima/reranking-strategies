@@ -5,6 +5,7 @@ from pathlib import Path
 from .answer_judging import OpenAIAnswerJudge, evaluate_answers
 from .data import load_documents, load_edges, load_queries, validate_dataset
 from .evaluation import evaluate, recommend_best_strategy
+from .judge_calibration import calibrate_judge
 from .pricing import (
     CallBudget,
     OPENAI_STANDARD_RATES_PER_MILLION,
@@ -29,7 +30,9 @@ ROOT = Path(__file__).resolve().parents[2]
 def main() -> None:
     parser = argparse.ArgumentParser(description="Evaluate retrieval and reranking strategies")
     parser.add_argument(
-        "command", choices=["evaluate", "benchmark", "benchmark-edges", "judge-answers"]
+        "command", choices=[
+            "evaluate", "benchmark", "benchmark-edges", "judge-answers", "calibrate-judge",
+        ]
     )
     parser.add_argument("--documents", default=str(ROOT / "data/documents.json"))
     parser.add_argument("--queries", default=str(ROOT / "data/golden.json"))
@@ -37,6 +40,7 @@ def main() -> None:
     parser.add_argument("--edge-queries", default=str(ROOT / "data/edge_golden.json"))
     parser.add_argument("--output", default="")
     parser.add_argument("--answers", default="", help="JSON answer samples for judge-answers")
+    parser.add_argument("--ratings", default="", help="Paired judge and reviewer scores for calibrate-judge")
     parser.add_argument("--judge-model", default="gpt-6-luna", help="Model used by judge-answers")
     parser.add_argument("--candidate-k", type=int, default=10)
     parser.add_argument("--metric-k", type=int, default=5)
@@ -59,6 +63,27 @@ def main() -> None:
     parser.add_argument("--cross-encoder", action="store_true", help="Use optional local cross-encoder reranking")
     parser.add_argument("--cross-encoder-model", default="cross-encoder/ms-marco-MiniLM-L-6-v2")
     args = parser.parse_args()
+
+    if args.command == "calibrate-judge":
+        if not args.ratings:
+            parser.error("calibrate-judge requires --ratings")
+        try:
+            rating_payload = json.loads(Path(args.ratings).read_text())
+        except json.JSONDecodeError as exc:
+            parser.error(f"{args.ratings} contains invalid JSON: {exc.msg}")
+        try:
+            report = calibrate_judge(rating_payload)
+        except ValueError as exc:
+            parser.error(str(exc))
+        serialized = json.dumps(report, indent=2)
+        if args.output:
+            output = Path(args.output)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(serialized + "\n")
+            print(json.dumps({"report": str(output), "label_source": report["label_source"]}, indent=2))
+        else:
+            print(serialized)
+        return
 
     evidence_documents = load_documents(args.documents)
     edge_mode = args.command == "benchmark-edges"
