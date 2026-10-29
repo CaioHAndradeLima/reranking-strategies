@@ -15,6 +15,38 @@ class Document:
 
 
 @dataclass(frozen=True)
+class GraphEdge:
+    """A directed, evidence-backed relationship stored as a searchable point."""
+
+    id: str
+    source_id: str
+    source_label: str
+    relation: str
+    target_id: str
+    target_label: str
+    description: str
+    evidence_ids: tuple[str, ...]
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def as_document(self) -> Document:
+        return Document(
+            id=self.id,
+            title=f"{self.source_label} — {self.relation} → {self.target_label}",
+            text=self.description,
+            metadata={
+                **self.metadata,
+                "kind": "edge",
+                "source_id": self.source_id,
+                "source_label": self.source_label,
+                "relation": self.relation,
+                "target_id": self.target_id,
+                "target_label": self.target_label,
+                "evidence_ids": list(self.evidence_ids),
+            },
+        )
+
+
+@dataclass(frozen=True)
 class Hit:
     document: Document
     score: float

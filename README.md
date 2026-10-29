@@ -71,6 +71,71 @@ Run the Docker-backed reindex regression test with:
 RERANKING_QDRANT_URL=http://localhost:6333 python -m unittest discover -s tests -p 'test_qdrant_store.py' -v
 ```
 
+### Retrieve and rerank graph edges
+
+Qdrant's HNSW graph is an internal nearest-neighbor index; its links are not application relationships. This experiment stores each domain relationship as its own vector point and keeps the directed endpoints, relation label, and supporting document IDs in the point payload. Qdrant points support a vector plus optional payload ([Qdrant points](https://qdrant.tech/documentation/concepts/points/)); indexed payload fields can filter vector search ([Qdrant filtering](https://qdrant.tech/documentation/search/filtering/)).
+
+The example edges in [`edges.json`](data/edges.json) are extracted from the sample passages. [`edge_golden.json`](data/edge_golden.json) labels relevant edges for six queries. `benchmark-edges` uses the existing BM25, dense Qdrant, and hybrid RRF retrievers, then evaluates the normal heuristic and MMR rerankers plus `EdgeStructureReranker`. That edge-aware reranker combines 75% of the candidate's normalized retrieval score with 25% lexical overlap across the query and the edge's source, relation, target, and description. This preserves most of the retriever's signal while testing whether edge fields can refine it.
+
+Run the BM25 experiment without Docker:
+
+```bash
+python -m reranking_strategies.cli benchmark-edges \
+  --output reports/edges-bm25.json
+```
+
+Run the dense and hybrid edge experiment with Qdrant:
+
+```bash
+docker compose up -d qdrant
+pip install -e '.[qdrant]'
+python -m reranking_strategies.cli benchmark-edges --dense \
+  --output reports/edges-qdrant.json
+```
+
+Each edge retains its `evidence_ids`, so after retrieving an edge you can fetch the supporting passages. The Qdrant adapter can also filter an edge search by indexed payload fields such as its source, relation, or target:
+
+```python
+from reranking_strategies.data import load_documents, load_edges
+from reranking_strategies.qdrant_store import QdrantDenseStore
+
+source_documents = load_documents("data/documents.json")
+edges = [edge.as_document() for edge in load_edges("data/edges.json", source_documents)]
+edge_documents_by_id = {edge.id: edge for edge in edges}
+store = QdrantDenseStore(collection="reranking_edge_demo")
+store.index(edges, indexed_payload_fields=("kind", "source_id", "relation", "target_id"))
+
+store.search(
+    "Which service schedules invoice retries?",
+    edge_documents_by_id,
+    limit=10,
+    filters={"kind": "edge", "source_id": "service:retry-worker"},
+)
+```
+
+This prototype retrieves individual edges; it does not yet expand graph paths or infer entities from arbitrary questions. For multi-hop questions, the next step is to identify seed entities, expand a bounded number of adjacent edges, then rerank candidate paths for endpoint and relation fit, direction, evidence quality, and path continuity. Keep that path benchmark separate from single-edge retrieval because it measures a different task.
+
+#### Measured edge-point baseline
+
+One Docker-backed run, 19 edge points, six queries, `candidate_k=10`, `metric_k=5`. Quality values are means; p95 latency is for retrieval or reranking stage only. Costs are zero for these non-LLM methods. The small corpus is a smoke benchmark.
+
+| Retrieval mode | Strategy | Recall@5 | MRR@5 | nDCG@5 | Stage p95 (ms) |
+| --- | --- | ---: | ---: | ---: | ---: |
+| BM25 | Retrieval only | 0.736 | 0.750 | 0.764 | 0.096 |
+| BM25 | Heuristic | 0.750 | 0.667 | 0.711 | 0.050 |
+| BM25 | MMR | 0.736 | 0.750 | 0.762 | 0.632 |
+| BM25 | Edge structure | 0.736 | 0.750 | 0.762 | 0.047 |
+| Dense | Retrieval only | 0.750 | 0.833 | 0.797 | 5.417 |
+| Dense | Heuristic | 0.750 | 0.667 | 0.711 | 0.134 |
+| Dense | MMR | 0.750 | 0.833 | 0.784 | 1.328 |
+| Dense | Edge structure | 0.750 | 0.833 | 0.797 | 0.097 |
+| Hybrid RRF | Retrieval only | 0.792 | 0.833 | **0.816** | 4.804 |
+| Hybrid RRF | Heuristic | 0.750 | 0.667 | 0.711 | 0.125 |
+| Hybrid RRF | MMR | 0.750 | 0.833 | 0.758 | 1.285 |
+| Hybrid RRF | Edge structure | 0.792 | 0.750 | 0.770 | 0.100 |
+
+On this tiny set, hybrid retrieval alone ranks the labeled edges best. The structural reranker tied dense retrieval and nearly tied BM25+MMR, but reduced hybrid nDCG; the ordinary heuristic also reduced nDCG. So edges are retrievable and can reuse the ranking evaluator, but these results do not support adding a reranker by default. We need more human-reviewed edge labels and multi-hop queries before drawing a broader conclusion. Live LLM edge reranking is available through `benchmark-edges --live-llm`, but has not been measured here because no API key is configured.
+
 ## Optional rerankers
 
 Install a local cross-encoder and include it in the evaluation:

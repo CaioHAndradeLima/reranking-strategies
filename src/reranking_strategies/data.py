@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .models import Document, QueryCase
+from .models import Document, GraphEdge, QueryCase
 
 
 def _load_rows(path: str | Path, kind: str) -> list[dict[str, Any]]:
@@ -49,6 +49,51 @@ def load_documents(path: str | Path) -> list[Document]:
             raise ValueError(f"{source}: document row {index} field 'metadata' must be an object")
         documents.append(Document(document_id, title, text, metadata))
     return documents
+
+
+def load_edges(path: str | Path, evidence_documents: list[Document]) -> list[GraphEdge]:
+    """Load directed edges and verify every edge points to known evidence passages."""
+    source = Path(path)
+    rows = _load_rows(source, "edges")
+    documents_by_id = {document.id: document for document in evidence_documents}
+    edges = []
+    seen_ids = set()
+    allowed_fields = {
+        "id", "source_id", "source_label", "relation", "target_id", "target_label",
+        "description", "evidence_ids", "metadata",
+    }
+    for index, row in enumerate(rows, start=1):
+        unexpected = set(row) - allowed_fields
+        if unexpected:
+            raise ValueError(f"{source}: edge row {index} has unknown fields: {sorted(unexpected)}")
+        edge_id = _required_text(row, "id", source, "edge", index)
+        if edge_id in seen_ids:
+            raise ValueError(f"{source}: duplicate edge id '{edge_id}'")
+        seen_ids.add(edge_id)
+        evidence_ids = row.get("evidence_ids")
+        if (not isinstance(evidence_ids, list) or not evidence_ids
+                or any(not isinstance(doc_id, str) or not doc_id.strip() for doc_id in evidence_ids)):
+            raise ValueError(f"{source}: edge row {index} requires non-empty evidence_ids")
+        if len(evidence_ids) != len(set(evidence_ids)):
+            raise ValueError(f"{source}: edge row {index} evidence_ids must be unique")
+        unknown = set(evidence_ids) - documents_by_id.keys()
+        if unknown:
+            raise ValueError(f"{source}: edge row {index} references unknown evidence: {sorted(unknown)}")
+        metadata = row.get("metadata", {})
+        if not isinstance(metadata, dict):
+            raise ValueError(f"{source}: edge row {index} metadata must be an object")
+        edges.append(GraphEdge(
+            id=edge_id,
+            source_id=_required_text(row, "source_id", source, "edge", index),
+            source_label=_required_text(row, "source_label", source, "edge", index),
+            relation=_required_text(row, "relation", source, "edge", index),
+            target_id=_required_text(row, "target_id", source, "edge", index),
+            target_label=_required_text(row, "target_label", source, "edge", index),
+            description=_required_text(row, "description", source, "edge", index),
+            evidence_ids=tuple(evidence_ids),
+            metadata=metadata,
+        ))
+    return edges
 
 
 def load_queries(path: str | Path) -> list[QueryCase]:

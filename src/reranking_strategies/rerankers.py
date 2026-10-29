@@ -44,6 +44,53 @@ class HeuristicReranker:
         return sorted(rescored, key=lambda hit: (-hit.score, hit.document.id))[:limit]
 
 
+class EdgeStructureReranker:
+    """Rerank edge points using query overlap with source, relation, and target."""
+
+    name = "edge_structure"
+    STOP_WORDS = {
+        "a", "an", "and", "are", "as", "at", "by", "do", "does", "for", "from",
+        "happened", "how", "i", "in", "is", "it", "long", "of", "on", "the", "then",
+        "to", "was", "what", "which", "who", "with",
+    }
+
+    def rerank(self, query: str, candidates: Sequence[Hit], limit: int = 10) -> list[Hit]:
+        _validate_rerank_request(candidates, limit)
+        if not candidates or limit == 0:
+            return []
+        query_terms = set(tokenize(query)) - self.STOP_WORDS
+        if not query_terms:
+            return list(candidates[:limit])
+
+        minimum = min(hit.score for hit in candidates)
+        maximum = max(hit.score for hit in candidates)
+        score_range = maximum - minimum
+
+        rescored = []
+        for hit in candidates:
+            metadata = hit.document.metadata
+            if metadata.get("kind") != "edge":
+                raise ValueError("EdgeStructureReranker requires edge documents")
+            source_terms = set(tokenize(metadata["source_label"]))
+            relation_terms = set(tokenize(metadata["relation"].replace("_", " ")))
+            target_terms = set(tokenize(metadata["target_label"]))
+            description_terms = set(tokenize(hit.document.text))
+
+            def overlap(terms: set[str]) -> float:
+                return len(query_terms & terms) / len(query_terms)
+
+            structure_score = (
+                0.25 * overlap(source_terms)
+                + 0.30 * overlap(relation_terms)
+                + 0.30 * overlap(target_terms)
+                + 0.15 * overlap(description_terms)
+            )
+            retrieval_score = (hit.score - minimum) / score_range if score_range else 1.0
+            score = 0.75 * retrieval_score + 0.25 * structure_score
+            rescored.append(Hit(hit.document, score, self.name))
+        return sorted(rescored, key=lambda hit: (-hit.score, hit.document.id))[:limit]
+
+
 class MMRReranker:
     """Greedy relevance/diversity reranking using token-set Jaccard similarity."""
 
