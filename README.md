@@ -82,6 +82,23 @@ python -m reranking_strategies.cli evaluate --cross-encoder
 
 For OpenAI listwise ranking, install the client, set `OPENAI_API_KEY`, and add `--llm-reranker`. `OPENAI_MODEL` can select the model; the default is `gpt-4o-mini`.
 
+### LLM as a judge: methods and test coverage
+
+The project has two LLM judging patterns, each covered by a deterministic unit test:
+
+| Method | Implementation | Existing test |
+| --- | --- | --- |
+| Pairwise comparison | [`PairwiseJudgeReranker`](src/reranking_strategies/rerankers.py) accepts an injected callback that compares two candidates for a query. Use it to plug in a custom comparator; this class does not make provider calls itself. | [`test_pairwise_adapter_uses_injected_judge`](tests/test_rerankers.py) supplies a fixed comparator and checks the ordering. |
+| OpenAI listwise ranking | [`OpenAIListwiseReranker`](src/reranking_strategies/rerankers.py) sends the query and candidate IDs/titles/texts in one Responses API request, then requires each candidate ID exactly once. Use it for one structured ordering request per query; input size grows with the candidate set. | [`test_openai_listwise_adapter_validates_candidate_ids`](tests/test_rerankers.py) uses a fake Responses client; [`test_openai_listwise_rejects_missing_or_duplicate_ids`](tests/test_rerankers.py) checks invalid output. |
+
+The CLI's `--llm-reranker` option selects the OpenAI listwise method in [`cli.py`](src/reranking_strategies/cli.py). It sets `store=False`. **There is no live-provider test in the unit suite:** OpenAI responses are replaced by a fake client, while the pairwise test injects a fixed comparator. These tests are deterministic, offline, and make no API calls. Running the CLI with `--llm-reranker` is the manual end-to-end check and requires an API key.
+
+```bash
+pip install -e '.[llm-judge]'
+export OPENAI_API_KEY="..."
+python -m reranking_strategies.cli evaluate --llm-reranker
+```
+
 ## Tests
 
 Run the offline unit suite with:
