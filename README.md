@@ -42,6 +42,16 @@ python -m reranking_strategies.cli evaluate \
   --output reports/bm25.json
 ```
 
+### Export rankings for context assembly
+
+To measure **rerank → assemble** in [contexting-strategies](https://github.com/CaioHAndradeLima/contexting-strategies), export per-query ranked IDs:
+
+```bash
+python scripts/export_context_candidates.py --output rerank_report.json
+```
+
+Use that JSON as the rerank bridge input (see contexting `data/rerank_report_sample.json`).
+
 ## How the evaluation works
 
 Each query has a set of relevant documents with graded labels: `0` irrelevant, `1` partially relevant, `2` useful, and `3` directly answers the query. For each retrieval mode, the evaluator gathers the candidate set once, then applies each reranker to those same candidates. This makes it possible to see whether a miss happened during retrieval or whether a relevant candidate was simply ranked too low.
