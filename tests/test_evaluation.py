@@ -1,6 +1,6 @@
 import unittest
 
-from reranking_strategies.evaluation import evaluate
+from reranking_strategies.evaluation import evaluate, recommend_best_strategy
 from reranking_strategies.models import Document, Hit, QueryCase
 
 
@@ -16,6 +16,19 @@ class ForeignReranker:
 
     def rerank(self, query, candidates, limit=10):
         return [Hit(Document("foreign", "Foreign", "not a candidate"), 1.0, self.name)]
+
+
+class MeasuredReranker:
+    name = "measured"
+
+    def __init__(self):
+        self.last_usage = {
+            "request_count": 1, "input_tokens": 100, "cached_input_tokens": 0,
+            "output_tokens": 10, "estimated_cost_usd": 0.002,
+        }
+
+    def rerank(self, query, candidates, limit=10):
+        return list(candidates[:limit])
 
 
 class EvaluationValidationTests(unittest.TestCase):
@@ -49,6 +62,28 @@ class EvaluationValidationTests(unittest.TestCase):
             evaluate([case], retriever, [DuplicateReranker()])
         with self.assertRaisesRegex(ValueError, "outside its candidates"):
             evaluate([case], retriever, [ForeignReranker()])
+
+    def test_evaluation_reports_latency_token_and_cost_metrics(self):
+        doc = Document("d", "Doc", "text")
+        case = QueryCase("q", "query", {"d": 1})
+        report = evaluate([case, case], lambda query, limit: [Hit(doc, 1.0, "test")],
+                          [MeasuredReranker()])
+
+        summary = report["summary"]["measured"]
+        self.assertEqual(summary["request_count"], 2)
+        self.assertEqual(summary["input_tokens"], 200)
+        self.assertEqual(summary["output_tokens"], 20)
+        self.assertAlmostEqual(summary["estimated_cost_usd"], 0.004)
+        self.assertGreaterEqual(summary["latency_ms_p95"], summary["latency_ms_p50"])
+        self.assertEqual(report["results"][0]["strategies"]["measured"]["request_count"], 1)
+
+    def test_recommendation_uses_quality_then_latency_and_cost(self):
+        best = recommend_best_strategy({
+            "slow": {"ndcg": 0.9, "latency_ms_p95": 80, "estimated_cost_usd": 0.01},
+            "fast": {"ndcg": 0.9, "latency_ms_p95": 10, "estimated_cost_usd": 0.02},
+            "low": {"ndcg": 0.8, "latency_ms_p95": 1, "estimated_cost_usd": 0.0},
+        })
+        self.assertEqual(best["strategy"], "fast")
 
 
 if __name__ == "__main__":
