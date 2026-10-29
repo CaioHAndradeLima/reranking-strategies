@@ -2,7 +2,8 @@ import unittest
 
 from reranking_strategies.models import Document, Hit
 from reranking_strategies.rerankers import (
-    HeuristicReranker, MMRReranker, OpenAIListwiseReranker, PairwiseJudgeReranker,
+    CrossEncoderReranker, HeuristicReranker, MMRReranker,
+    OpenAIListwiseReranker, PairwiseJudgeReranker,
 )
 
 
@@ -22,6 +23,20 @@ class RerankerTests(unittest.TestCase):
         reranker = MMRReranker()
         self.assertEqual(reranker.rerank("retry", []), [])
         self.assertEqual(len(reranker.rerank("retry", candidates(), limit=1)), 1)
+
+    def test_rerankers_reject_duplicate_candidates_and_negative_limits(self):
+        repeated = candidates() + [candidates()[0]]
+        with self.assertRaisesRegex(ValueError, "Candidate document IDs must be unique"):
+            HeuristicReranker().rerank("retry", repeated)
+        with self.assertRaisesRegex(ValueError, "limit must be a non-negative integer"):
+            HeuristicReranker().rerank("retry", candidates(), limit=-1)
+
+    def test_cross_encoder_rejects_incomplete_score_output(self):
+        reranker = CrossEncoderReranker.__new__(CrossEncoderReranker)
+        reranker.model = type("Model", (), {"predict": lambda self, pairs: [0.5]})()
+
+        with self.assertRaisesRegex(ValueError, "one score for every candidate"):
+            reranker.rerank("retry", candidates())
 
     def test_pairwise_adapter_uses_injected_judge(self):
         reranker = PairwiseJudgeReranker(lambda query, left, right: 1 if left.document.id == "a" else -1)
