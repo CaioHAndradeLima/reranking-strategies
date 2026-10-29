@@ -1,6 +1,40 @@
 # Reranking Strategies
 
-A reproducible lab for comparing hybrid retrieval and reranking methods on a synthetic RAG corpus. The first milestone focuses on transparent baselines and offline evaluation; it does not require an API key.
+A reproducible lab for comparing retrieval and reranking strategies on a small synthetic RAG corpus. It makes the ranking step visible: retrieve a broad candidate set, reorder it using query and passage relevance, then evaluate what should reach the context window.
+
+## Why rerank?
+
+Retrieval systems quickly find passages that may answer a query. Their top results can still contain related but non-answering material. A reranker examines the query and each candidate together and reorders that set for the specific query.
+
+```text
+Query
+  → Retrieve a broad candidate set
+  → Optionally fuse dense and keyword results
+  → Rerank candidates against the query
+  → Keep the final top K passages for context
+```
+
+Reranking cannot recover a relevant passage that retrieval left out. Candidate recall therefore sets an upper bound on the quality a reranker can achieve. Reranking also adds latency and, for hosted judges, may add API cost.
+
+| Strategy | What it does | Trade-off |
+| --- | --- | --- |
+| Retrieval only | Uses the initial BM25 or dense ranking | Simple and fast; may favor related text over direct evidence |
+| Retrieval plus reranking | Reorders one candidate list for the query | Can improve evidence order; adds compute and latency |
+| Hybrid retrieval plus reranking | Fuses keyword and dense candidates, then reranks | Combines exact matches and semantic similarity; adds more components to tune |
+
+Apply access and metadata filters during retrieval, before reranking. The full design guidance is in [Retrieval strategy: reranking](https://github.com/CaioHAndradeLima/AI-System-Architecturing-Engineering/blob/main/retrieval/search/retrieval-strategy-reranking.md).
+
+## What this project compares
+
+- **BM25** keyword retrieval as the offline baseline.
+- **Dense retrieval** using Qdrant and FastEmbed, plus **hybrid retrieval** using reciprocal rank fusion (RRF).
+- **Heuristic** lexical/title scoring and **MMR** relevance/diversity reranking.
+- Optional **cross-encoder** reranking and **OpenAI listwise** reranking. A generic pairwise judge adapter is available for an injected comparator.
+- Per-query and aggregate **Recall@K**, **MRR@K**, **nDCG@K**, and mean stage latency.
+
+The golden set uses graded relevance: 0 is irrelevant, 1 is partial, 2 is useful, and 3 directly answers the query. The evaluation runs each reranker on the same retrieved candidates, so it can distinguish retrieval misses from ordering improvements.
+
+For guidance on golden sets, candidate recall, ranking metrics, hard negatives, latency, and fine-tuning decisions, see [Reranker evaluation and fine-tuning](https://github.com/CaioHAndradeLima/AI-System-Architecturing-Engineering/blob/main/retrieval/search/retrieval-reranker-evaluation-and-fine-tuning.md).
 
 ## Quick start
 
@@ -9,28 +43,55 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
 python -m reranking_strategies.cli evaluate
-python -m unittest discover -s tests -v
 ```
 
-Start the optional local Qdrant service with `docker compose up -d qdrant`, install `pip install -e '.[qdrant]'`, then run `python -m reranking_strategies.cli evaluate --dense`. FastEmbed downloads its embedding model on first use. For a local cross-encoder, install `pip install -e '.[cross-encoder]'` and add `--cross-encoder` (optionally set `--cross-encoder-model`). To compare OpenAI listwise reranking, install `pip install -e '.[llm-judge]'`, set `OPENAI_API_KEY` (and optionally `OPENAI_MODEL`), then add `--llm-reranker`. The default evaluation harness and tests run offline.
+The default run evaluates BM25, heuristic reranking, and MMR using the included data. The defaults retrieve 10 candidates and score the top 5. Save a detailed JSON report with:
 
-Run the Qdrant integration check against the Compose service with:
+```bash
+python -m reranking_strategies.cli evaluate --candidate-k 20 --metric-k 5 --output reports/bm25.json
+```
+
+Both cutoffs must be positive integers. The input loaders check JSON structure, unique IDs, relevance grades, answerability, and references from query labels to documents before evaluation.
+
+## Run dense and hybrid retrieval
+
+Start Qdrant, install its optional client and embedding dependencies, and run the dense and hybrid comparisons:
+
+```bash
+docker compose up -d qdrant
+pip install -e '.[qdrant]'
+python -m reranking_strategies.cli evaluate --dense --output reports/qdrant.json
+```
+
+FastEmbed downloads the embedding model on first use. Each run replaces the configured Qdrant collection with a snapshot of the current corpus, so deleted documents do not remain searchable. Stop the service with `docker compose down`.
+
+Run the Docker-backed reindex regression test with:
 
 ```bash
 RERANKING_QDRANT_URL=http://localhost:6333 python -m unittest discover -s tests -p 'test_qdrant_store.py' -v
 ```
 
-Indexing replaces the configured Qdrant collection with a snapshot of the supplied corpus, so rerunning evaluation cannot leave stale documents behind. The integration check downloads the FastEmbed model on first use.
+## Optional rerankers
 
-## What's included
+Install a local cross-encoder and include it in the evaluation:
 
-- Synthetic corpus and graded query relevance labels (`data/`).
-- BM25 retrieval, reciprocal rank fusion (RRF), and a common candidate/ranking interface.
-- Heuristic, cross-encoder, and optional LLM pairwise reranking strategies.
-- Recall@k, MRR@k, and nDCG@k evaluation, per-query results, and JSON reports.
-- Unit tests for BM25, RRF, reranking behavior, metrics, and golden-data integrity.
-- Optional Docker Compose Qdrant adapter for local dense + BM25 hybrid evaluation.
+```bash
+pip install -e '.[cross-encoder]'
+python -m reranking_strategies.cli evaluate --cross-encoder
+```
 
-The corpus is intentionally synthetic. It is useful for controlled regression tests, but results should be validated against manually reviewed queries before making quality claims. Keep held-out queries untouched during tuning. The pairwise comparator accepts an injected judge callback for deterministic tests; the optional OpenAI listwise strategy makes one structured ranking request per query.
+For OpenAI listwise ranking, install the client, set `OPENAI_API_KEY`, and add `--llm-reranker`. `OPENAI_MODEL` can select the model; the default is `gpt-4o-mini`.
 
-The JSON loaders validate row shapes, unique IDs, relevance grades, query answerability, and cross references before the CLI runs an evaluation. Both `candidate_k` and `metric_k` must be positive integers.
+## Tests
+
+Run the offline unit suite with:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+The GitHub Actions workflow runs those tests and a Qdrant integration test against the Docker Compose service on each push and pull request. Optional cross-encoder and OpenAI calls are not required by the offline suite.
+
+## Scope and limitations
+
+The included corpus is synthetic and useful for controlled regression checks, not for making quality claims about a production corpus. For meaningful comparisons, build a manually reviewed golden set, keep held-out queries untouched during tuning, and measure quality and latency on representative traffic. This project evaluates ranking; it does not fine-tune or deploy a reranker.
