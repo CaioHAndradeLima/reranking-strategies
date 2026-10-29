@@ -1,0 +1,998 @@
+{
+  "label_source": "synthetic_demo",
+  "simulation": {
+    "description": "Deterministic fictional scores use predefined latent quality values, a known judge bias, and three rater-severity profiles. No answers were reviewed by people; do not interpret the metrics as evidence of real judge-human agreement."
+  },
+  "records": [
+    {
+      "sample_id": "demo-correctness-01",
+      "dimension": "correctness",
+      "split": "calibration",
+      "judge_score": 1,
+      "human_scores": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "sample_id": "demo-correctness-02",
+      "dimension": "correctness",
+      "split": "calibration",
+      "judge_score": 1,
+      "human_scores": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "sample_id": "demo-correctness-03",
+      "dimension": "correctness",
+      "split": "calibration",
+      "judge_score": 1,
+      "human_scores": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "sample_id": "demo-correctness-04",
+      "dimension": "correctness",
+      "split": "calibration",
+      "judge_score": 1,
+      "human_scores": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "sample_id": "demo-correctness-05",
+      "dimension": "correctness",
+      "split": "validation",
+      "judge_score": 1,
+      "human_scores": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "sample_id": "demo-correctness-06",
+      "dimension": "correctness",
+      "split": "validation",
+      "judge_score": 1,
+      "human_scores": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "sample_id": "demo-correctness-07",
+      "dimension": "correctness",
+      "split": "calibration",
+      "judge_score": 2,
+      "human_scores": [
+        0,
+        1,
+        2
+      ]
+    },
+    {
+      "sample_id": "demo-correctness-08",
+      "dimension": "correctness",
+      "split": "calibration",
+      "judge_score": 2,
+      "human_scores": [
+        0,
+        1,
+        2
+      ]
+    },
+    {
+      "sample_id": "demo-correctness-09",
+      "dimension": "correctness",
+      "split": "calibration",
+      "judge_score": 2,
+      "human_scores": [
+        0,
+        1,
+        2
+      ]
+    },
+    {
+      "sample_id": "demo-correctness-10",
+      "dimension": "correctness",
+      "split": "calibration",
+      "judge_score": 2,
+      "human_scores": [
+        0,
+        1,
+        2
+      ]
+    },
+    {
+      "sample_id": "demo-correctness-11",
+      "dimension": "correctness",
+      "split": "validation",
+      "judge_score": 2,
+      "human_scores": [
+        0,
+        1,
+        2
+      ]
+    },
+    {
+      "sample_id": "demo-correctness-12",
+      "dimension": "correctness",
+      "split": "validation",
+      "judge_score": 2,
+      "human_scores": [
+        0,
+        1,
+        2
+      ]
+    },
+    {
+      "sample_id": "demo-correctness-13",
+      "dimension": "correctness",
+      "split": "calibration",
+      "judge_score": 3,
+      "human_scores": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "sample_id": "demo-correctness-14",
+      "dimension": "correctness",
+      "split": "calibration",
+      "judge_score": 3,
+      "human_scores": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "sample_id": "demo-correctness-15",
+      "dimension": "correctness",
+      "split": "calibration",
+      "judge_score": 3,
+      "human_scores": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "sample_id": "demo-correctness-16",
+      "dimension": "correctness",
+      "split": "calibration",
+      "judge_score": 3,
+      "human_scores": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "sample_id": "demo-correctness-17",
+      "dimension": "correctness",
+      "split": "validation",
+      "judge_score": 3,
+      "human_scores": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "sample_id": "demo-correctness-18",
+      "dimension": "correctness",
+      "split": "validation",
+      "judge_score": 3,
+      "human_scores": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "sample_id": "demo-correctness-19",
+      "dimension": "correctness",
+      "split": "calibration",
+      "judge_score": 4,
+      "human_scores": [
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "sample_id": "demo-correctness-20",
+      "dimension": "correctness",
+      "split": "calibration",
+      "judge_score": 4,
+      "human_scores": [
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "sample_id": "demo-correctness-21",
+      "dimension": "correctness",
+      "split": "calibration",
+      "judge_score": 4,
+      "human_scores": [
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "sample_id": "demo-correctness-22",
+      "dimension": "correctness",
+      "split": "calibration",
+      "judge_score": 4,
+      "human_scores": [
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "sample_id": "demo-correctness-23",
+      "dimension": "correctness",
+      "split": "validation",
+      "judge_score": 4,
+      "human_scores": [
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "sample_id": "demo-correctness-24",
+      "dimension": "correctness",
+      "split": "validation",
+      "judge_score": 4,
+      "human_scores": [
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "sample_id": "demo-correctness-25",
+      "dimension": "correctness",
+      "split": "calibration",
+      "judge_score": 4,
+      "human_scores": [
+        3,
+        4,
+        4
+      ]
+    },
+    {
+      "sample_id": "demo-correctness-26",
+      "dimension": "correctness",
+      "split": "calibration",
+      "judge_score": 4,
+      "human_scores": [
+        3,
+        4,
+        4
+      ]
+    },
+    {
+      "sample_id": "demo-correctness-27",
+      "dimension": "correctness",
+      "split": "calibration",
+      "judge_score": 4,
+      "human_scores": [
+        3,
+        4,
+        4
+      ]
+    },
+    {
+      "sample_id": "demo-correctness-28",
+      "dimension": "correctness",
+      "split": "calibration",
+      "judge_score": 4,
+      "human_scores": [
+        3,
+        4,
+        4
+      ]
+    },
+    {
+      "sample_id": "demo-correctness-29",
+      "dimension": "correctness",
+      "split": "validation",
+      "judge_score": 4,
+      "human_scores": [
+        3,
+        4,
+        4
+      ]
+    },
+    {
+      "sample_id": "demo-correctness-30",
+      "dimension": "correctness",
+      "split": "validation",
+      "judge_score": 4,
+      "human_scores": [
+        3,
+        4,
+        4
+      ]
+    },
+    {
+      "sample_id": "demo-groundedness-01",
+      "dimension": "groundedness",
+      "split": "calibration",
+      "judge_score": 1,
+      "human_scores": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "sample_id": "demo-groundedness-02",
+      "dimension": "groundedness",
+      "split": "calibration",
+      "judge_score": 1,
+      "human_scores": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "sample_id": "demo-groundedness-03",
+      "dimension": "groundedness",
+      "split": "calibration",
+      "judge_score": 1,
+      "human_scores": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "sample_id": "demo-groundedness-04",
+      "dimension": "groundedness",
+      "split": "calibration",
+      "judge_score": 1,
+      "human_scores": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "sample_id": "demo-groundedness-05",
+      "dimension": "groundedness",
+      "split": "validation",
+      "judge_score": 1,
+      "human_scores": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "sample_id": "demo-groundedness-06",
+      "dimension": "groundedness",
+      "split": "validation",
+      "judge_score": 1,
+      "human_scores": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "sample_id": "demo-groundedness-07",
+      "dimension": "groundedness",
+      "split": "calibration",
+      "judge_score": 2,
+      "human_scores": [
+        0,
+        1,
+        2
+      ]
+    },
+    {
+      "sample_id": "demo-groundedness-08",
+      "dimension": "groundedness",
+      "split": "calibration",
+      "judge_score": 2,
+      "human_scores": [
+        0,
+        1,
+        2
+      ]
+    },
+    {
+      "sample_id": "demo-groundedness-09",
+      "dimension": "groundedness",
+      "split": "calibration",
+      "judge_score": 2,
+      "human_scores": [
+        0,
+        1,
+        2
+      ]
+    },
+    {
+      "sample_id": "demo-groundedness-10",
+      "dimension": "groundedness",
+      "split": "calibration",
+      "judge_score": 2,
+      "human_scores": [
+        0,
+        1,
+        2
+      ]
+    },
+    {
+      "sample_id": "demo-groundedness-11",
+      "dimension": "groundedness",
+      "split": "validation",
+      "judge_score": 2,
+      "human_scores": [
+        0,
+        1,
+        2
+      ]
+    },
+    {
+      "sample_id": "demo-groundedness-12",
+      "dimension": "groundedness",
+      "split": "validation",
+      "judge_score": 2,
+      "human_scores": [
+        0,
+        1,
+        2
+      ]
+    },
+    {
+      "sample_id": "demo-groundedness-13",
+      "dimension": "groundedness",
+      "split": "calibration",
+      "judge_score": 3,
+      "human_scores": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "sample_id": "demo-groundedness-14",
+      "dimension": "groundedness",
+      "split": "calibration",
+      "judge_score": 3,
+      "human_scores": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "sample_id": "demo-groundedness-15",
+      "dimension": "groundedness",
+      "split": "calibration",
+      "judge_score": 3,
+      "human_scores": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "sample_id": "demo-groundedness-16",
+      "dimension": "groundedness",
+      "split": "calibration",
+      "judge_score": 3,
+      "human_scores": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "sample_id": "demo-groundedness-17",
+      "dimension": "groundedness",
+      "split": "validation",
+      "judge_score": 3,
+      "human_scores": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "sample_id": "demo-groundedness-18",
+      "dimension": "groundedness",
+      "split": "validation",
+      "judge_score": 3,
+      "human_scores": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "sample_id": "demo-groundedness-19",
+      "dimension": "groundedness",
+      "split": "calibration",
+      "judge_score": 4,
+      "human_scores": [
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "sample_id": "demo-groundedness-20",
+      "dimension": "groundedness",
+      "split": "calibration",
+      "judge_score": 4,
+      "human_scores": [
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "sample_id": "demo-groundedness-21",
+      "dimension": "groundedness",
+      "split": "calibration",
+      "judge_score": 4,
+      "human_scores": [
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "sample_id": "demo-groundedness-22",
+      "dimension": "groundedness",
+      "split": "calibration",
+      "judge_score": 4,
+      "human_scores": [
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "sample_id": "demo-groundedness-23",
+      "dimension": "groundedness",
+      "split": "validation",
+      "judge_score": 4,
+      "human_scores": [
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "sample_id": "demo-groundedness-24",
+      "dimension": "groundedness",
+      "split": "validation",
+      "judge_score": 4,
+      "human_scores": [
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "sample_id": "demo-groundedness-25",
+      "dimension": "groundedness",
+      "split": "calibration",
+      "judge_score": 4,
+      "human_scores": [
+        3,
+        4,
+        4
+      ]
+    },
+    {
+      "sample_id": "demo-groundedness-26",
+      "dimension": "groundedness",
+      "split": "calibration",
+      "judge_score": 4,
+      "human_scores": [
+        3,
+        4,
+        4
+      ]
+    },
+    {
+      "sample_id": "demo-groundedness-27",
+      "dimension": "groundedness",
+      "split": "calibration",
+      "judge_score": 4,
+      "human_scores": [
+        3,
+        4,
+        4
+      ]
+    },
+    {
+      "sample_id": "demo-groundedness-28",
+      "dimension": "groundedness",
+      "split": "calibration",
+      "judge_score": 4,
+      "human_scores": [
+        3,
+        4,
+        4
+      ]
+    },
+    {
+      "sample_id": "demo-groundedness-29",
+      "dimension": "groundedness",
+      "split": "validation",
+      "judge_score": 4,
+      "human_scores": [
+        3,
+        4,
+        4
+      ]
+    },
+    {
+      "sample_id": "demo-groundedness-30",
+      "dimension": "groundedness",
+      "split": "validation",
+      "judge_score": 4,
+      "human_scores": [
+        3,
+        4,
+        4
+      ]
+    },
+    {
+      "sample_id": "demo-assertiveness_calibration-01",
+      "dimension": "assertiveness_calibration",
+      "split": "calibration",
+      "judge_score": 0,
+      "human_scores": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "sample_id": "demo-assertiveness_calibration-02",
+      "dimension": "assertiveness_calibration",
+      "split": "calibration",
+      "judge_score": 0,
+      "human_scores": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "sample_id": "demo-assertiveness_calibration-03",
+      "dimension": "assertiveness_calibration",
+      "split": "calibration",
+      "judge_score": 0,
+      "human_scores": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "sample_id": "demo-assertiveness_calibration-04",
+      "dimension": "assertiveness_calibration",
+      "split": "calibration",
+      "judge_score": 0,
+      "human_scores": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "sample_id": "demo-assertiveness_calibration-05",
+      "dimension": "assertiveness_calibration",
+      "split": "validation",
+      "judge_score": 0,
+      "human_scores": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "sample_id": "demo-assertiveness_calibration-06",
+      "dimension": "assertiveness_calibration",
+      "split": "validation",
+      "judge_score": 0,
+      "human_scores": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "sample_id": "demo-assertiveness_calibration-07",
+      "dimension": "assertiveness_calibration",
+      "split": "calibration",
+      "judge_score": 0,
+      "human_scores": [
+        0,
+        1,
+        2
+      ]
+    },
+    {
+      "sample_id": "demo-assertiveness_calibration-08",
+      "dimension": "assertiveness_calibration",
+      "split": "calibration",
+      "judge_score": 0,
+      "human_scores": [
+        0,
+        1,
+        2
+      ]
+    },
+    {
+      "sample_id": "demo-assertiveness_calibration-09",
+      "dimension": "assertiveness_calibration",
+      "split": "calibration",
+      "judge_score": 0,
+      "human_scores": [
+        0,
+        1,
+        2
+      ]
+    },
+    {
+      "sample_id": "demo-assertiveness_calibration-10",
+      "dimension": "assertiveness_calibration",
+      "split": "calibration",
+      "judge_score": 0,
+      "human_scores": [
+        0,
+        1,
+        2
+      ]
+    },
+    {
+      "sample_id": "demo-assertiveness_calibration-11",
+      "dimension": "assertiveness_calibration",
+      "split": "validation",
+      "judge_score": 0,
+      "human_scores": [
+        0,
+        1,
+        2
+      ]
+    },
+    {
+      "sample_id": "demo-assertiveness_calibration-12",
+      "dimension": "assertiveness_calibration",
+      "split": "validation",
+      "judge_score": 0,
+      "human_scores": [
+        0,
+        1,
+        2
+      ]
+    },
+    {
+      "sample_id": "demo-assertiveness_calibration-13",
+      "dimension": "assertiveness_calibration",
+      "split": "calibration",
+      "judge_score": 1,
+      "human_scores": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "sample_id": "demo-assertiveness_calibration-14",
+      "dimension": "assertiveness_calibration",
+      "split": "calibration",
+      "judge_score": 1,
+      "human_scores": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "sample_id": "demo-assertiveness_calibration-15",
+      "dimension": "assertiveness_calibration",
+      "split": "calibration",
+      "judge_score": 1,
+      "human_scores": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "sample_id": "demo-assertiveness_calibration-16",
+      "dimension": "assertiveness_calibration",
+      "split": "calibration",
+      "judge_score": 1,
+      "human_scores": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "sample_id": "demo-assertiveness_calibration-17",
+      "dimension": "assertiveness_calibration",
+      "split": "validation",
+      "judge_score": 1,
+      "human_scores": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "sample_id": "demo-assertiveness_calibration-18",
+      "dimension": "assertiveness_calibration",
+      "split": "validation",
+      "judge_score": 1,
+      "human_scores": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "sample_id": "demo-assertiveness_calibration-19",
+      "dimension": "assertiveness_calibration",
+      "split": "calibration",
+      "judge_score": 2,
+      "human_scores": [
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "sample_id": "demo-assertiveness_calibration-20",
+      "dimension": "assertiveness_calibration",
+      "split": "calibration",
+      "judge_score": 2,
+      "human_scores": [
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "sample_id": "demo-assertiveness_calibration-21",
+      "dimension": "assertiveness_calibration",
+      "split": "calibration",
+      "judge_score": 2,
+      "human_scores": [
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "sample_id": "demo-assertiveness_calibration-22",
+      "dimension": "assertiveness_calibration",
+      "split": "calibration",
+      "judge_score": 2,
+      "human_scores": [
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "sample_id": "demo-assertiveness_calibration-23",
+      "dimension": "assertiveness_calibration",
+      "split": "validation",
+      "judge_score": 2,
+      "human_scores": [
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "sample_id": "demo-assertiveness_calibration-24",
+      "dimension": "assertiveness_calibration",
+      "split": "validation",
+      "judge_score": 2,
+      "human_scores": [
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "sample_id": "demo-assertiveness_calibration-25",
+      "dimension": "assertiveness_calibration",
+      "split": "calibration",
+      "judge_score": 3,
+      "human_scores": [
+        3,
+        4,
+        4
+      ]
+    },
+    {
+      "sample_id": "demo-assertiveness_calibration-26",
+      "dimension": "assertiveness_calibration",
+      "split": "calibration",
+      "judge_score": 3,
+      "human_scores": [
+        3,
+        4,
+        4
+      ]
+    },
+    {
+      "sample_id": "demo-assertiveness_calibration-27",
+      "dimension": "assertiveness_calibration",
+      "split": "calibration",
+      "judge_score": 3,
+      "human_scores": [
+        3,
+        4,
+        4
+      ]
+    },
+    {
+      "sample_id": "demo-assertiveness_calibration-28",
+      "dimension": "assertiveness_calibration",
+      "split": "calibration",
+      "judge_score": 3,
+      "human_scores": [
+        3,
+        4,
+        4
+      ]
+    },
+    {
+      "sample_id": "demo-assertiveness_calibration-29",
+      "dimension": "assertiveness_calibration",
+      "split": "validation",
+      "judge_score": 3,
+      "human_scores": [
+        3,
+        4,
+        4
+      ]
+    },
+    {
+      "sample_id": "demo-assertiveness_calibration-30",
+      "dimension": "assertiveness_calibration",
+      "split": "validation",
+      "judge_score": 3,
+      "human_scores": [
+        3,
+        4,
+        4
+      ]
+    }
+  ]
+}
