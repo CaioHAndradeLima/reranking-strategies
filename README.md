@@ -2,7 +2,7 @@
 
 An engineering lab for answering a practical RAG question: **which retrieval and reranking pipeline gives the best evidence for the least latency and cost?**
 
-The project runs keyword, vector, and hybrid retrieval against the same small corpus, applies several reranking methods to the retrieved candidates, and reports ranking quality alongside latency and LLM usage. It is intended for learning and controlled experiments. It is not a hosted RAG service, a production capacity benchmark, or a fine-tuning framework.
+The project runs keyword, vector, and hybrid retrieval against the same small corpus, applies several reranking methods to the retrieved candidates, and reports ranking quality alongside latency and LLM usage. It is intended for learning and controlled experiments. It is not a hosted RAG service, a production capacity benchmark, or a production model-training framework.
 
 ## Start here
 
@@ -19,7 +19,7 @@ These are the measured passage-ranking results from one local run over six synth
 
 The separate graph-edge run used six queries and 19 edge points. Hybrid retrieval alone scored **0.816 nDCG@5**; the edge-structure reranker scored **0.770** on the same retrieval mode. This experiment does not support enabling that reranker by default.
 
-Cross-encoder, listwise LLM, pairwise LLM, and bounded fallback methods are implemented, but their live/model-backed quality results have not been measured in this checkout. The LLM tests use fakes, so they verify request handling and accounting without making paid API calls. See the detailed [passage results](#passage-benchmark-result), [edge results](#edge-benchmark-result), and [LLM benchmark instructions](#live-llm-ranking-benchmark).
+The cross-encoder now has a small fine-tuning demonstration; its held-out result matched the pretrained model on this tiny dataset. Listwise LLM, pairwise LLM, and bounded fallback quality results have not been measured live. The LLM tests use fakes, so they verify request handling and accounting without making paid API calls. See the detailed [passage results](#passage-benchmark-result), [edge results](#edge-benchmark-result), [fine-tuning run](#fine-tuning-run-result), and [LLM benchmark instructions](#live-llm-ranking-benchmark).
 
 These results come from tiny synthetic datasets and one local run; they do not predict performance on another corpus. Reranking cannot recover evidence retrieval missed, so compare candidate recall as well as ranking metrics.
 
@@ -94,7 +94,7 @@ Use retrieval to find a candidate set; use reranking to improve that set's order
 | **Retrieval only** | Passes the retriever's order through unchanged. | You need a baseline to determine whether reranking helps. | No additional model cost or reranking stage. It is not itself a reranker. |
 | **Heuristic reranking** | Reorders by lexical overlap and title matches. | You need a cheap, transparent first reranker. | Limited semantic understanding. It had the best measured passage nDCG in the included six-query run. |
 | **MMR** | Balances relevance with diversity among selected passages. | Top results repeat the same fact and broader coverage is useful. | Diversity can push down multiple relevant passages. It lowered nDCG in the included run. |
-| **Cross-encoder** | Scores each query-passage pair jointly with a local model. | A general reranker is not accurate enough and the candidate set is small. | More compute per candidate than vector retrieval; evaluate on the actual shortlist. Implemented, but not measured in the published result table. |
+| **Cross-encoder** | Scores each query-passage pair jointly with a local model. | A general reranker is not accurate enough and the candidate set is small. | More compute per candidate than vector retrieval. The new fine-tuning demo measures it against its pretrained checkpoint; see below. |
 | **Listwise LLM judge** | Gives a candidate set to an LLM and asks it to order the passages. | You want flexible reasoning over a small shortlist. | One request can rank several items, but prompt size grows with candidate text. Live quality results are not yet recorded. |
 | **Pairwise LLM judge** | Asks an LLM to choose between candidates, then sorts from the comparisons. | Head-to-head judgments are valuable on a very short list. | Up to `n(n-1)/2` calls for `n` candidates; five candidates can mean ten comparisons. Live quality results are not yet recorded. |
 | **Bounded fallback** | Calls a primary listwise model and retries once with a fallback under a condition. | You want to test whether a second attempt helps harder cases. | Adds latency and cost. Current trigger is model-reported confidence, not a calibrated probability; live quality results are not yet recorded. |
@@ -120,7 +120,30 @@ Fine-tuning changes the model using examples of the relevance behavior you want.
 
 With binary labels, train a scalar cross-encoder score using a binary classification loss. With preference or graded labels, use a ranking objective that teaches the model which passage should be above another. Sentence Transformers documents [cross-encoder training](https://sbert.net/docs/cross_encoder/training_overview.html), [reranking evaluators](https://sbert.net/docs/package_reference/cross_encoder/evaluation.html), and [training examples for rerankers](https://sbert.net/examples/cross_encoder/training/rerankers/README.html). Training should use negatives drawn from the candidates that production retrieval actually returns; otherwise the training task and serving task differ.
 
-For this project, the next implementation would be an optional `scripts/train_cross_encoder.py` plus a reviewed query/passage training dataset. It would save a versioned local checkpoint, then reuse the existing `--cross-encoder-model` option to compare that checkpoint with the original model using the same retrieval candidates and held-out queries. The final comparison should include nDCG/MRR, candidate recall, p95 latency, model size, and inference cost. **This repository does not currently include a training script or real training labels**; it can evaluate a cross-encoder, including a compatible local model path, but training is future work.
+This project now includes an optional training demonstration using the existing query/document relevance labels. Install the training dependencies and run it with:
+
+```bash
+pip install -e '.[cross-encoder-training]'
+python scripts/finetune_cross_encoder_demo.py \
+  --model cross-encoder/ms-marco-MiniLM-L-6-v2 \
+  --epochs 1 \
+  --output reports/cross-encoder-finetuning-demo.json
+```
+
+The script uses BM25's top candidates as training pairs and hard negatives, maps graded relevance from 0–3 to a 0–1 target, and fine-tunes a scalar cross-encoder with binary cross-entropy. It uses leave-one-query-out cross-validation: each query is held out once while the model trains on the others. After evaluation, it trains and saves a convenience checkpoint at `models/demo-cross-encoder`; use `--cross-encoder-model models/demo-cross-encoder` to load that checkpoint. The final checkpoint was trained on all six example queries, so **do not use its in-sample scores as the reported result**. The reported metrics come from the held-out folds.
+
+This demonstrates the mechanics, not production-quality training. Six synthetic queries cannot support a reliable generalization claim. Real projects should use many human-reviewed queries, mine hard negatives from the actual production retriever, keep a query-disjoint validation set for model selection and an untouched test set for the final report, then compare candidate recall, nDCG/MRR, latency, model size, and serving cost. The current demo has no independent final test set or real training labels.
+
+#### Fine-tuning run result
+
+One run on the six-query synthetic set with BM25 candidates (up to 10), top-five metrics, one training epoch, and `cross-encoder/ms-marco-MiniLM-L-6-v2` at revision `233902d25c440f23af6f7d6e94d2946bac0bee0a`. Each of the six queries was held out once; the other five formed that fold's training set. Quality values are means across folds. Latency was measured on this Apple Silicon Mac using MPS, with five inference repeats per query; p95 is calculated across the six per-query median times. Training time is for the trainer only, excluding model loading and data preparation.
+
+| Model | Held-out queries | Recall@5 | MRR@5 | nDCG@5 | Inference stage p95 (ms) | Training time |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Pretrained cross-encoder | 6 | 0.833 | 0.833 | 0.806 | 10.36 | — |
+| Fine-tuned cross-encoder (leave-one-query-out) | 6 | 0.833 | 0.833 | 0.806 | 10.88 | 1.83 s total across folds |
+
+Fine-tuning produced **no ranking-quality gain** in this run: all three quality metrics were unchanged. Inference p95 was similar for the pretrained and fine-tuned models; fine-tuning did not make the same architecture faster. Training time is for the trainer across all folds and excludes downloading/loading model weights. This is a useful negative result: fine-tuning is not automatically an improvement, even when the training loop runs successfully.
 
 Fine-tune only if the held-out evaluation shows a meaningful quality gain that is worth the additional training, hosting, and maintenance cost. If retrieval is missing the evidence, fix retrieval or candidate depth first. If the general reranker already meets the quality and latency targets, fine-tuning adds complexity without a demonstrated benefit.
 
@@ -315,6 +338,7 @@ The VM estimates exclude storage, snapshots, replicas or a multi-node cluster, m
 | `src/reranking_strategies/qdrant_store.py` | Qdrant indexing, filtering, and search adapter |
 | `data/` | Example passages, graph edges, and labeled query sets |
 | `scripts/generate_judge_calibration_demo.py` | Reproducible synthetic ratings for exercising the calibration pipeline |
+| `scripts/finetune_cross_encoder_demo.py` | Leave-one-query-out cross-encoder training and evaluation demonstration |
 | `tests/` | Offline unit tests and optional Qdrant integration tests |
 
 ## Tests
@@ -342,4 +366,4 @@ GitHub Actions runs the unit and Qdrant integration suites on pushes and pull re
 - The benchmark numbers do not prove that a reranker will improve another corpus.
 - LLM judge scores are not human ground truth and need calibration and review.
 - The single-node local Qdrant setup is not a highly available deployment.
-- The project evaluates retrieval and ranking; it does not generate answers, operate a RAG application, or fine-tune models.
+- The project evaluates retrieval and ranking; it does not generate answers, operate a RAG application, or provide a production model-training pipeline. The cross-encoder training code is a small experiment on synthetic data.
