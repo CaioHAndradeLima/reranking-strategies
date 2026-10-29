@@ -7,6 +7,14 @@ from .models import Hit
 from .retrieval import tokenize
 
 
+def _validate_rerank_request(candidates: Sequence[Hit], limit: int) -> None:
+    if type(limit) is not int or limit < 0:
+        raise ValueError("limit must be a non-negative integer")
+    candidate_ids = [hit.document.id for hit in candidates]
+    if len(candidate_ids) != len(set(candidate_ids)):
+        raise ValueError("Candidate document IDs must be unique when reranking")
+
+
 class Reranker(Protocol):
     name: str
 
@@ -19,6 +27,9 @@ class HeuristicReranker:
     name = "heuristic"
 
     def rerank(self, query: str, candidates: Sequence[Hit], limit: int = 10) -> list[Hit]:
+        _validate_rerank_request(candidates, limit)
+        if not candidates or limit == 0:
+            return []
         query_terms = set(tokenize(query))
         rescored = []
         for hit in candidates:
@@ -42,6 +53,7 @@ class MMRReranker:
         self.relevance_weight = relevance_weight
 
     def rerank(self, query: str, candidates: Sequence[Hit], limit: int = 10) -> list[Hit]:
+        _validate_rerank_request(candidates, limit)
         if not candidates:
             return []
         maximum = max((hit.score for hit in candidates), default=0.0) or 1.0
@@ -73,7 +85,12 @@ class CrossEncoderReranker:
         self.model = CrossEncoder(model_name)
 
     def rerank(self, query: str, candidates: Sequence[Hit], limit: int = 10) -> list[Hit]:
-        scores = self.model.predict([(query, hit.document.searchable_text) for hit in candidates])
+        _validate_rerank_request(candidates, limit)
+        if not candidates or limit == 0:
+            return []
+        scores = list(self.model.predict([(query, hit.document.searchable_text) for hit in candidates]))
+        if len(scores) != len(candidates):
+            raise ValueError("Cross-encoder must return one score for every candidate")
         ranked = [Hit(hit.document, float(score), self.name) for hit, score in zip(candidates, scores)]
         return sorted(ranked, key=lambda hit: (-hit.score, hit.document.id))[:limit]
 
@@ -88,6 +105,10 @@ class PairwiseJudgeReranker:
 
     def rerank(self, query: str, candidates: Sequence[Hit], limit: int = 10) -> list[Hit]:
         from functools import cmp_to_key
+
+        _validate_rerank_request(candidates, limit)
+        if limit == 0:
+            return []
 
         def compare(left: Hit, right: Hit) -> int:
             outcome = self.compare(query, left, right)
@@ -114,7 +135,8 @@ class OpenAIListwiseReranker:
         self.model = model or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
     def rerank(self, query: str, candidates: Sequence[Hit], limit: int = 10) -> list[Hit]:
-        if not candidates:
+        _validate_rerank_request(candidates, limit)
+        if not candidates or limit == 0:
             return []
         docs = [{"id": hit.document.id, "title": hit.document.title, "text": hit.document.text}
                 for hit in candidates]
