@@ -1,0 +1,12 @@
+[
+  {"id":"doc-001","title":"Invoice retry policy","text":"The billing worker retries failed invoice payments three times with exponential backoff. Retry state is stored in the billing_jobs table.","metadata":{"team":"billing","split":"train"}},
+  {"id":"doc-002","title":"Payment retry queue","text":"Invoice retry messages are published to the billing queue. The retry worker owns payment retry scheduling and exponential backoff.","metadata":{"team":"billing","split":"train"}},
+  {"id":"doc-003","title":"Customer notification service","text":"The notification service emails customers after an invoice payment fails. It does not schedule payment retries.","metadata":{"team":"communications","split":"train"}},
+  {"id":"doc-004","title":"Search index refresh","text":"The catalog indexer refreshes product search documents every fifteen minutes using a background job.","metadata":{"team":"search","split":"train"}},
+  {"id":"doc-005","title":"Database connection settings","text":"The API connects to PostgreSQL through the DATABASE_URL environment variable. Production credentials are stored in the secret manager.","metadata":{"team":"platform","split":"train"}},
+  {"id":"doc-006","title":"Invoice retry incident INC-4821","text":"Incident INC-4821 was caused by a stuck billing worker. The remediation increased the retry limit from two attempts to three.","metadata":{"team":"billing","split":"train"}},
+  {"id":"doc-007","title":"Refund approval workflow","text":"Refund requests above 500 dollars require manager approval. Approved refunds are processed by the payments API.","metadata":{"team":"payments","split":"train"}},
+  {"id":"doc-008","title":"Log retention standard","text":"Application logs are retained for thirty days. Security audit events are retained for one year.","metadata":{"team":"platform","split":"train"}},
+  {"id":"doc-009","title":"Invoice retry runbook","text":"To inspect stuck payment retries, check billing_jobs and the billing queue, then restart the billing worker. The policy allows three attempts.","metadata":{"team":"billing","split":"train"}},
+  {"id":"doc-010","title":"Product catalog ownership","text":"The catalog team owns product descriptions, SKU metadata, and publication status for the storefront.","metadata":{"team":"catalog","split":"train"}}
+]

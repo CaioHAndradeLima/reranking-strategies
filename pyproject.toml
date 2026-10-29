@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "reranking-strategies"
+version = "0.1.0"
+description = "A reproducible hybrid retrieval and reranking evaluation lab"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+dev = []
+cross-encoder = ["sentence-transformers>=3"]
+qdrant = ["qdrant-client[fastembed]>=1.14.2"]
+llm-judge = ["openai>=1.100"]
+
+[project.scripts]
+rerank-lab = "reranking_strategies.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
