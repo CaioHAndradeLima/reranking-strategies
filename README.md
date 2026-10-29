@@ -84,7 +84,7 @@ For OpenAI listwise ranking, install the client, set `OPENAI_API_KEY`, and add `
 
 ### LLM as a judge: methods and test coverage
 
-The project has three LLM judging patterns, each covered by deterministic unit tests:
+The project has three LLM judging patterns for passage ranking, covered by deterministic unit tests:
 
 | Method | Strategy and cost shape | Available as |
 | --- | --- | --- |
@@ -136,6 +136,52 @@ The following is one local Docker-backed run on the included **six-query synthet
 In this run, heuristic reranking had the top nDCG in all three retrieval modes. The initial candidate set capped recall, and MMR's diversity penalty hurt the hybrid result. Small timing values are machine/run dependent; repeat measurements on representative data before choosing a production strategy.
 
 **Live LLM results (no retry vs one-retry pipeline): not measured in this checkout.** No `OPENAI_API_KEY` is configured, so there are no honest model quality, latency, token, or cost numbers to publish yet. Run the live benchmark above to populate those rows from provider usage; the report compares each model's listwise result and the retry pipeline on the same queries. In the retry result, request and cost totals include the primary and any fallback calls actually made.
+
+### Judge generated answers for correctness and assertiveness
+
+Ranking metrics tell us whether useful passages appear near the top. They do not tell us whether a RAG system's **answer** is correct or overstates what those passages support. The separate `judge-answers` command evaluates supplied answer/evidence samples. It does not generate answers; run the same answer-generation model, prompt, and context budget for each retrieval strategy, then provide each output and its evidence IDs.
+
+The golden query file now supports an optional `reference_answer`. The included answerable queries have initial references derived from the corpus; the unanswerable query has `reference_answer: null`. Have a human review references before treating scores as evaluation labels, and retain a held-out query set. A sample answer file looks like:
+
+```json
+[
+  {
+    "query_id": "q-003",
+    "strategy": "dense+heuristic",
+    "answer": "Security audit events are retained for one year.",
+    "evidence_ids": ["doc-008"]
+  },
+  {
+    "query_id": "q-006",
+    "strategy": "dense+heuristic",
+    "answer": "The supplied documents do not specify a retention period for chat recordings.",
+    "evidence_ids": []
+  }
+]
+```
+
+Run the judge with the optional OpenAI dependency and API key:
+
+```bash
+python -m reranking_strategies.cli judge-answers \
+  --answers reports/answers.json \
+  --judge-model gpt-6-luna \
+  --max-llm-calls 100 \
+  --output reports/answer-judge.json
+```
+
+The judge returns per-sample and per-strategy mean scores on a **0–4 scale** for:
+
+| Score | What it measures | Score of 4 |
+| --- | --- | --- |
+| Correctness | Agreement with the reference answer | Correct and complete for the query |
+| Groundedness | Support for factual claims in the supplied evidence | All material claims are supported |
+| Assertiveness calibration | Whether certainty is proportional to evidence; low scores penalize confident unsupported claims and also needless hedging when evidence is clear | Claims are appropriately qualified |
+| Abstention correctness | Whether an answer abstains for an unanswerable query and answers an answerable one | Correct decision; reported as a rate from 0 to 1 |
+
+The judge also returns unsupported claims, a short rationale, latency, request count, input/output tokens, and estimated cost. `assertiveness_calibration` measures evidence-relative overclaiming, not how confident or persuasive the writing sounds. Correctness and groundedness are separate: an answer may match the reference but lack support in the passages actually provided. The judge does not see the strategy label, reducing one source of scoring bias.
+
+These are model judgments, not ground truth. Blindly sample outputs for human review, compare judge scores with human labels, and check disagreement before using the scores to select a production system. Keep the judge model fixed across strategies; where practical, use a judge different from the answer generator. **Live answer-judge scores have not been collected in this checkout** because no `OPENAI_API_KEY` is configured.
 
 ## Tests
 

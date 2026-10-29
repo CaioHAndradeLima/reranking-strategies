@@ -39,6 +39,18 @@ class DatasetValidationTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "cannot have relevance labels"):
                 load_queries(self.write_json(directory, "queries.json", bad_queries))
 
+    def test_query_reference_answers_are_optional_text_and_forbidden_when_unanswerable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            valid = [{"id": "q1", "query": "question", "relevance": {},
+                      "reference_answer": "A reviewed answer."}]
+            queries = load_queries(self.write_json(directory, "queries.json", valid))
+            self.assertEqual(queries[0].reference_answer, "A reviewed answer.")
+
+            bad = [{"id": "q2", "query": "question", "relevance": {},
+                    "answerable": False, "reference_answer": "An answer."}]
+            with self.assertRaisesRegex(ValueError, "cannot have a reference_answer"):
+                load_queries(self.write_json(directory, "queries.json", bad))
+
     def test_dataset_rejects_relevance_for_unknown_documents(self):
         with tempfile.TemporaryDirectory() as directory:
             documents = load_documents(self.write_json(

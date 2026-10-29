@@ -28,3 +28,4 @@ class QueryCase:
     relevance: dict[str, int]
     tags: tuple[str, ...] = ()
     answerable: bool = True
+    reference_answer: str | None = None

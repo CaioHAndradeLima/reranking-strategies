@@ -56,7 +56,7 @@ def load_queries(path: str | Path) -> list[QueryCase]:
     rows = _load_rows(source, "queries")
     queries = []
     seen_ids = set()
-    allowed_fields = {"id", "query", "relevance", "tags", "answerable"}
+    allowed_fields = {"id", "query", "relevance", "tags", "answerable", "reference_answer"}
     for index, row in enumerate(rows, start=1):
         unexpected = set(row) - allowed_fields
         if unexpected:
@@ -82,7 +82,18 @@ def load_queries(path: str | Path) -> list[QueryCase]:
             raise ValueError(f"{source}: query row {index} field 'answerable' must be a boolean")
         if not answerable and relevance:
             raise ValueError(f"{source}: unanswerable query '{query_id}' cannot have relevance labels")
-        queries.append(QueryCase(query_id, query, relevance, tuple(tags), answerable))
+        reference_answer = row.get("reference_answer")
+        if reference_answer is not None and (
+            not isinstance(reference_answer, str) or not reference_answer.strip()
+        ):
+            raise ValueError(
+                f"{source}: query row {index} field 'reference_answer' must be a non-empty string or null"
+            )
+        if not answerable and reference_answer is not None:
+            raise ValueError(
+                f"{source}: unanswerable query '{query_id}' cannot have a reference_answer"
+            )
+        queries.append(QueryCase(query_id, query, relevance, tuple(tags), answerable, reference_answer))
     return queries
 
 
