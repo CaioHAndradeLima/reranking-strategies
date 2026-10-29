@@ -32,3 +32,5 @@ Indexing replaces the configured Qdrant collection with a snapshot of the suppli
 - Optional Docker Compose Qdrant adapter for local dense + BM25 hybrid evaluation.
 
 The corpus is intentionally synthetic. It is useful for controlled regression tests, but results should be validated against manually reviewed queries before making quality claims. Keep held-out queries untouched during tuning. The pairwise comparator accepts an injected judge callback for deterministic tests; the optional OpenAI listwise strategy makes one structured ranking request per query.
+
+The JSON loaders validate row shapes, unique IDs, relevance grades, query answerability, and cross references before the CLI runs an evaluation. Both `candidate_k` and `metric_k` must be positive integers.

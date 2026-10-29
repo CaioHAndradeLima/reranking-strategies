@@ -2,7 +2,7 @@ import argparse
 import json
 from pathlib import Path
 
-from .data import load_documents, load_queries
+from .data import load_documents, load_queries, validate_dataset
 from .evaluation import evaluate
 from .rerankers import CrossEncoderReranker, HeuristicReranker, MMRReranker, OpenAIListwiseReranker
 from .retrieval import BM25Retriever, rrf_fuse
@@ -27,6 +27,7 @@ def main() -> None:
 
     documents = load_documents(args.documents)
     queries = load_queries(args.queries)
+    validate_dataset(documents, queries)
     bm25 = BM25Retriever(documents)
     rerankers = [HeuristicReranker(), MMRReranker()]
     if args.llm_reranker:
