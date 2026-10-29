@@ -14,3 +14,29 @@ jobs:
           python-version: "3.11"
       - run: python -m pip install -e .
       - run: python -m unittest discover -s tests -v
+
+  qdrant-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install -e '.[qdrant]'
+      - run: docker compose up -d qdrant
+      - name: Wait for Qdrant
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://localhost:6333/readyz; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose logs qdrant
+          exit 1
+      - name: Run Qdrant integration test
+        env:
+          RERANKING_QDRANT_URL: http://localhost:6333
+        run: python -m unittest discover -s tests -p 'test_qdrant_store.py' -v
+      - if: always()
+        run: docker compose down --volumes
