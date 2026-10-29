@@ -14,6 +14,14 @@ python -m unittest discover -s tests -v
 
 Start the optional local Qdrant service with `docker compose up -d qdrant`, install `pip install -e '.[qdrant]'`, then run `python -m reranking_strategies.cli evaluate --dense`. FastEmbed downloads its embedding model on first use. For a local cross-encoder, install `pip install -e '.[cross-encoder]'` and add `--cross-encoder` (optionally set `--cross-encoder-model`). To compare OpenAI listwise reranking, install `pip install -e '.[llm-judge]'`, set `OPENAI_API_KEY` (and optionally `OPENAI_MODEL`), then add `--llm-reranker`. The default evaluation harness and tests run offline.
 
+Run the Qdrant integration check against the Compose service with:
+
+```bash
+RERANKING_QDRANT_URL=http://localhost:6333 python -m unittest discover -s tests -p 'test_qdrant_store.py' -v
+```
+
+Indexing replaces the configured Qdrant collection with a snapshot of the supplied corpus, so rerunning evaluation cannot leave stale documents behind. The integration check downloads the FastEmbed model on first use.
+
 ## What's included
 
 - Synthetic corpus and graded query relevance labels (`data/`).
